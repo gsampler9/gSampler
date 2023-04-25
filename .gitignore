@@ -1,0 +1,9 @@
+venv
+build
+dist
+gs.egg-info
+.vscode
+__pycache__
+*.nsys-rep
+third_party
+data
