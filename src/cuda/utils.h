@@ -226,17 +226,30 @@ __device__ __forceinline__ T _ldg(T* addr) {
 #endif
 }
 
-#define SWITCH_BITS(bits, DType, ...)                              \
-  do {                                                             \
-    if ((bits) == 32) {                                            \
-      typedef float DType;                                         \
-      { __VA_ARGS__ }                                              \
-    } else if ((bits) == 64) {                                     \
-      typedef double DType;                                        \
-      { __VA_ARGS__ }                                              \
-    } else {                                                       \
-      LOG(FATAL) << "Data type not recognized with bits " << bits; \
-    }                                                              \
+#define ID_TYPE_SWITCH(SCALAR_TYPE, IdType, ...)                      \
+  do {                                                                \
+    if ((SCALAR_TYPE) == torch::kInt32) {                             \
+      typedef int IdType;                                             \
+      { __VA_ARGS__ }                                                 \
+    } else if ((SCALAR_TYPE) == torch::kInt64) {                      \
+      typedef int64_t IdType;                                         \
+      { __VA_ARGS__ }                                                 \
+    } else {                                                          \
+      LOG(FATAL) << "Index type not recognized with " << SCALAR_TYPE; \
+    }                                                                 \
+  } while (0)
+
+#define FLOAT_TYPE_SWITCH(SCALAR_TYPE, DType, ...)                   \
+  do {                                                               \
+    if ((SCALAR_TYPE) == torch::kFloat32) {                          \
+      typedef float DType;                                           \
+      { __VA_ARGS__ }                                                \
+    } else if ((SCALAR_TYPE) == torch::kFloat64) {                   \
+      typedef double DType;                                          \
+      { __VA_ARGS__ }                                                \
+    } else {                                                         \
+      LOG(FATAL) << "Data type not recognized with " << SCALAR_TYPE; \
+    }                                                                \
   } while (0)
 }  // namespace impl
 }  // namespace gs

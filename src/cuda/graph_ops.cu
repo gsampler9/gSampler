@@ -81,11 +81,11 @@ void CSCSum(torch::Tensor indptr, torch::optional<torch::Tensor> e_ids,
   const int nbx = (num_element + nty - 1) / nty;
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
-  SWITCH_IDX(use_e_map, use_n_map, {
-    CUDA_KERNEL_CALL((_SegmentSumKernel<IdType, DType, UseEMap, UseNMap>),
-                     nblks, nthrs, indptr.data_ptr<IdType>(), e_ids_map,
-                     n_ids_map, data.data_ptr<DType>(), num_element, powk,
-                     out_len, out_data.data_ptr<DType>());
+  SWITCH_IDX(use_e_map, {
+    CUDA_KERNEL_CALL((_SegmentSumKernel<IdType, DType, UseEMap, false>), nblks,
+                     nthrs, indptr.data_ptr<IdType>(), e_ids_map, n_ids_map,
+                     data.data_ptr<DType>(), num_element, powk, out_len,
+                     out_data.data_ptr<DType>());
   });
 }
 

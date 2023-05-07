@@ -176,7 +176,7 @@ torch::Tensor TensorUniqueCUDA(torch::Tensor node_ids) {
   return ret_tensor;
 }
 
-std::tuple<torch::Tensor, std::vector<torch::Tensor>> RelabelCUDA(
+std::tuple<torch::Tensor, std::vector<torch::Tensor>> TensorRelabelCUDA(
     const std::vector<torch::Tensor>& mapping_tensor,
     const std::vector<torch::Tensor>& data_requiring_relabel) {
   std::vector<int64_t> split_sizes;

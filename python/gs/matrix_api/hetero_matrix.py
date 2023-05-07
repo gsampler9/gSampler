@@ -2,7 +2,7 @@
 import torch
 from .matrix import Matrix
 
-
+'''
 class HeteroMatrix(object):
     def __init__(self, hetero_graph: torch.classes.gs_classes.HeteroGraph):
         self._hetero_graph = hetero_graph
@@ -25,3 +25,4 @@ class HeteroMatrix(object):
 
     def metapath_random_walk_fused(self, seeds, metapath):
         return self._hetero_graph.metapath_random_walk_fused(seeds, metapath)
+'''

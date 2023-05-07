@@ -8,16 +8,14 @@
 namespace gs {
 namespace impl {
 
-std::tuple<torch::Tensor, torch::Tensor> ListSamplingCUDA(torch::Tensor data,
-                                                          int64_t num_picks,
-                                                          bool replace);
+torch::Tensor ListSamplingCUDA(int64_t num_items, int64_t num_picks,
+                               bool replace);
 
-std::tuple<torch::Tensor, torch::Tensor> ListSamplingProbsCUDA(
-    torch::Tensor data, torch::Tensor probs, int64_t num_picks, bool replace);
+torch::Tensor ListSamplingProbsCUDA(torch::Tensor probs, int64_t num_picks,
+                                    bool replace);
 
-std::tuple<torch::Tensor, torch::Tensor>
-BatchListSamplingProbsCUDA(torch::Tensor probs,int64_t num_picks, bool replace,
-                           torch::Tensor range);
+std::tuple<torch::Tensor, torch::Tensor> BatchListSamplingProbsCUDA(
+    torch::Tensor probs, int64_t num_picks, bool replace, torch::Tensor range);
 
 torch::Tensor TensorUniqueCUDA(torch::Tensor input);
 

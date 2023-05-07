@@ -1,8 +1,8 @@
-add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
 project(GS LANGUAGES CXX CUDA)
 set(CMAKE_CXX_STANDARD 14)
+add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -63,3 +63,4 @@ file(GLOB_RECURSE TEST_SRC_FILES ${PROJECT_SOURCE_DIR}/tests/*.cc)
 add_executable(runUnitTests ${TEST_SRC_FILES})
 target_link_libraries(runUnitTests gs gtest gtest_main)
 add_test(UnitTests runUnitTests)
+

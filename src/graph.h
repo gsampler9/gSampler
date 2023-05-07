@@ -10,120 +10,105 @@ namespace gs {
 
 class Graph : public torch::CustomClassHolder {
  public:
-  Graph(bool is_subgraph) { is_subgraph_ = is_subgraph; }
-  Graph(bool is_subgraph, torch::optional<torch::Tensor> col_ids,
-        torch::optional<torch::Tensor> row_ids, int64_t num_cols,
-        int64_t num_rows)
-      : is_subgraph_{is_subgraph},
-        num_cols_{num_cols},
-        num_rows_{num_rows},
-        col_ids_{col_ids},
-        row_ids_{row_ids} {}
-  void LoadCSC(torch::Tensor indptr, torch::Tensor indices);
-  void LoadCOO(torch::Tensor row, torch::Tensor col);
-  void LoadCSR(torch::Tensor indptr, torch::Tensor indices);
-  void LoadCSCWithColIds(torch::Tensor column_ids, torch::Tensor indptr,
-                         torch::Tensor indices);
-  void SetMetaData(torch::optional<torch::Tensor> col_ids,
-                   torch::optional<torch::Tensor> row_ids, int64_t num_cols,
-                   int64_t num_rows) {
-    num_cols_ = num_cols;
+  // init graph
+  // python code will make sure that all inputs are legitimate
+  Graph(int64_t num_rows, int64_t num_cols) {
     num_rows_ = num_rows;
-    col_ids_ = col_ids;
-    row_ids_ = row_ids;
+    num_cols_ = num_cols;
   }
-  void SetCSC(std::shared_ptr<CSC> csc);
-  void SetCSR(std::shared_ptr<CSR> csr);
-  void SetCOO(std::shared_ptr<COO> coo);
-  void SetCOOByTensor(torch::Tensor row, torch::Tensor col,
-                      torch::optional<torch::Tensor> e_ids, bool row_sorted,
-                      bool col_sorted);
-  void SetData(torch::Tensor data);
-  void SetValidCols(torch::Tensor val_cols);
-  void SetValidRows(torch::Tensor val_rows);
-  void SetNumEdges(int64_t num_edges);
-  void CSC2CSR();
-  void CSC2DCSR();
-  void CSR2CSC();
-  void CSR2DCSC();
+  void LoadCSC(torch::Tensor indptr, torch::Tensor indices) {
+    csc_ = std::make_shared<CSC>();
+    csc_->indptr = indptr;
+    csc_->indices = indices;
+    num_edges_ = indices.numel();
+    LOG(INFO) << "Loaded CSC with " << num_rows_ << " rows, " << num_cols_
+              << " cols, " << num_edges_ << " edges!";
+  }
+  void LoadCOO(torch::Tensor row, torch::Tensor col, bool row_sorted,
+               bool col_sorted) {
+    coo_ = std::make_shared<COO>();
+    coo_->row = row;
+    coo_->col = col;
+    coo_->row_sorted = row_sorted;
+    coo_->col_sorted = col_sorted;
+    num_edges_ = row.numel();
+    LOG(INFO) << "Loaded COO with " << num_rows_ << " rows, " << num_cols_
+              << " cols, " << num_edges_ << " edges!";
+  }
+  void LoadCSR(torch::Tensor indptr, torch::Tensor indices) {
+    csr_ = std::make_shared<CSR>();
+    csr_->indptr = indptr;
+    csr_->indices = indices;
+    num_edges_ = indices.numel();
+    LOG(INFO) << "Loaded CSR with " << num_rows_ << " rows, " << num_cols_
+              << " cols, " << num_edges_ << " edges!";
+  }
+
+  // set private member
+  void SetCSC(std::shared_ptr<CSC> csc) { csc_ = csc; }
+  void SetCSR(std::shared_ptr<CSR> csr) { csr_ = csr; }
+  void SetCOO(std::shared_ptr<COO> coo) { coo_ = coo; }
+  void SetNumEdges(int64_t num_edges) { num_edges_ = num_edges; }
+  void SetNumCols(int64_t num_cols) { num_cols_ = num_cols; }
+  void SetNumRows(int64_t num_rows) { num_rows_ = num_rows; }
+
+  // get private member
+  std::shared_ptr<CSC> GetCSC() { return csc_; }
+  std::shared_ptr<CSR> GetCSR() { return csr_; }
+  std::shared_ptr<COO> GetCOO() { return coo_; }
+  int64_t GetNumRows() { return num_rows_; }
+  int64_t GetNumCols() { return num_cols_; }
+  int64_t GetNumEdges() { return num_edges_; }
+
+  // format coversion
   void CreateSparseFormat(int64_t format);
-  std::shared_ptr<CSC> GetCSC();
-  std::shared_ptr<CSR> GetCSR();
-  std::shared_ptr<COO> GetCOO();
-  std::vector<torch::Tensor> GetCSCTensor();
-  std::vector<torch::Tensor> GetCOOTensor();
-  torch::optional<torch::Tensor> GetData(std::string order = "default");
-  int64_t GetNumRows();
-  int64_t GetNumCols();
-  int64_t GetNumEdges();
-  c10::intrusive_ptr<Graph> FusedBidirSlicing(torch::Tensor column_seeds,
-                                              torch::Tensor row_seeds);
-  c10::intrusive_ptr<Graph> BatchFusedBidirSlicing(torch::Tensor column_seeds,
-                                                   torch::Tensor col_ptr,
-                                                   torch::Tensor row_seeds,
-                                                   torch::Tensor row_ptr);
-  c10::intrusive_ptr<Graph> Slicing(torch::Tensor n_ids, int64_t axis,
-                                    int64_t on_format, int64_t output_format,
-                                    bool relabel = false);
-  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchSlicing(
-      torch::Tensor n_ids, torch::Tensor nid_ptr, int64_t axis,
-      int64_t on_format, int64_t output_format, bool relabel, bool encoding);
 
-  c10::intrusive_ptr<Graph> Sampling(int64_t axis, int64_t fanout, bool replace,
-                                     int64_t on_format, int64_t output_format);
-  c10::intrusive_ptr<Graph> SamplingProbs(int64_t axis,
-                                          torch::Tensor edge_probs,
-                                          int64_t fanout, bool replace,
-                                          int64_t on_format,
-                                          int64_t output_format);
-  c10::intrusive_ptr<Graph> ColumnwiseFusedSlicingAndSampling(
-      torch::Tensor column_index, int64_t fanout, bool replace);
-  torch::Tensor Sum(int64_t axis, int64_t powk, int64_t on_format);
-  c10::intrusive_ptr<Graph> Normalize(int64_t axis, int64_t on_format);
-  c10::intrusive_ptr<Graph> Divide(torch::Tensor divisor, int64_t axis,
-                                   int64_t on_format);
-  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> EDivUSum(
-      torch::Tensor divisor);
-  // A "valid" node means that the node is required by the user or that it is
-  // not an isolated node.
-  torch::Tensor AllValidNode();
-  torch::Tensor GetRows();       // return row_ids
-  torch::Tensor GetCols();       // return col_ids
-  torch::Tensor GetValidRows();  // return valid row_ids.
-  torch::Tensor GetValidCols();  // return valid col_ids.
+  // return format
+  torch::Tensor GetCSCIndptr();
+  torch::Tensor GetCSCIndices();
+  torch::Tensor GetCSCEids();
+  torch::Tensor GetCOORows();
+  torch::Tensor GetCOOCols();
+  torch::Tensor GetCOOEids();
+  torch::Tensor GetCSRIndptr();
+  torch::Tensor GetCSRIndices();
+  torch::Tensor GetCSREids();
 
-  //  If is_original, it return  in global_id else in local_id.
-  torch::Tensor GetCOORows(bool is_original);  // return coo_row, which is
-                                               // coo[0]
-  torch::Tensor GetCOOCols(bool is_original);  // return coo_row, which is
-                                               // coo[1]
-  std::tuple<torch::Tensor, int64_t, int64_t, torch::Tensor, torch::Tensor,
-             torch::optional<torch::Tensor>, std::string>
-  Relabel();
-  std::vector<torch::Tensor> MetaData();
-  std::vector<torch::Tensor> COOMetaData();
-  std::vector<torch::Tensor> CSCMetaData();
-  torch::Tensor RandomWalk(torch::Tensor seeds, int64_t walk_length);
+  // graph operation
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Slicing(
+      torch::Tensor seeds, int64_t axis, int64_t on_format,
+      int64_t output_format);
+
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Sampling(
+      int64_t axis, int64_t fanout, bool replace, int64_t on_format,
+      int64_t output_format);
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> SamplingProbs(
+      int64_t axis, torch::Tensor edge_probs, int64_t fanout, bool replace,
+      int64_t on_format, int64_t output_format);
   void SDDMM(const std::string& op, torch::Tensor lhs, torch::Tensor rhs,
              torch::Tensor out, int64_t lhs_target, int64_t rhs_target,
              int64_t on_format);
-  std::vector<c10::intrusive_ptr<Graph>> Split(int64_t split_size);
-  void Decode(int64_t encoding_size);
+  void SpMM(const std::string& op, const std::string& reduce,
+            torch::Tensor ufeat, torch::Tensor efeat, torch::Tensor out,
+            torch::Tensor argu, torch::Tensor arge, int64_t u_target,
+            int64_t on_format);
 
-  // todo: return global_e_id
+  std::tuple<torch::Tensor, int64_t, int64_t, torch::Tensor, torch::Tensor,
+             torch::optional<torch::Tensor>, std::string>
+  GraphRelabel(torch::Tensor col_seeds, torch::Tensor row_ids);
+  torch::Tensor GetValidNodes(torch::Tensor col_seeds, torch::Tensor row_ids);
+
+  torch::Tensor RandomWalk(torch::Tensor seeds, int64_t walk_length);
+  torch::Tensor Node2Vec(torch::Tensor seeds, int64_t walk_length, double p,
+                         double q);
+
  private:
-  bool is_subgraph_ = false;
-  int64_t num_cols_ = 0;  // total number of cols in a matrix
-  int64_t num_rows_ = 0;  // total number of rows in a matrix
-  int64_t num_edges_ = 0;
+  int64_t num_cols_ = 0;   // total number of cols in matrix
+  int64_t num_rows_ = 0;   // total number of rows in matrix
+  int64_t num_edges_ = 0;  // total number of edges in matrix
   std::shared_ptr<CSC> csc_;
   std::shared_ptr<CSR> csr_;
   std::shared_ptr<COO> coo_;
-  torch::optional<torch::Tensor> data_;
-  torch::optional<torch::Tensor> col_ids_;      // column id in matrix
-  torch::optional<torch::Tensor> row_ids_;      // row id in matrix
-  torch::optional<torch::Tensor> val_col_ids_;  // valid column id in matrix
-  torch::optional<torch::Tensor> val_row_ids_;  // valid row id in matrix
 };
 
 }  // namespace gs

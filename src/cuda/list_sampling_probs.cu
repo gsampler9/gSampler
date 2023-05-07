@@ -9,26 +9,22 @@ namespace gs {
 namespace impl {
 
 template <typename IdType, typename FloatType>
-std::tuple<torch::Tensor, torch::Tensor> _ListSamplingProbs(torch::Tensor data,
-                                                            torch::Tensor probs,
-                                                            int64_t num_picks,
-                                                            bool replace) {
-  int num_items = data.numel();
+torch::Tensor _ListSamplingProbs(torch::Tensor probs, int64_t num_picks,
+                                 bool replace) {
+  int num_items = probs.numel();
   torch::TensorOptions index_options =
       torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA);
 
   if (num_items <= num_picks && !replace) {
     // todo (ping), do we need clone here?
-    return std::make_tuple(data, torch::arange(num_items, index_options));
+    return torch::arange(num_items, index_options);
   }
 
-  torch::Tensor select;
   torch::Tensor index;
 
   if (replace) {
     // using cdf sampling
     torch::Tensor prefix_probs = probs.clone();
-    select = torch::empty(num_picks, data.options());
     index = torch::empty(num_picks, index_options);
 
     // prefix_sum
@@ -38,9 +34,8 @@ std::tuple<torch::Tensor, torch::Tensor> _ListSamplingProbs(torch::Tensor data,
     using it = thrust::counting_iterator<IdType>;
     thrust::for_each(
         it(0), it(num_picks),
-        [_in = data.data_ptr<IdType>(), _index = index.data_ptr<int64_t>(),
-         _prefix_probs = prefix_probs.data_ptr<FloatType>(),
-         _out = select.data_ptr<IdType>(), num_items,
+        [_index = index.data_ptr<int64_t>(),
+         _prefix_probs = prefix_probs.data_ptr<FloatType>(), num_items,
          random_seed] __device__(IdType i) mutable {
           curandState rng;
           curand_init(i * random_seed, 0, 0, &rng);
@@ -49,8 +44,6 @@ std::tuple<torch::Tensor, torch::Tensor> _ListSamplingProbs(torch::Tensor data,
           int64_t item = cub::UpperBound<FloatType*, int64_t, FloatType>(
               _prefix_probs, num_items, rand);
           item = MIN(item, num_items - 1);
-          // output
-          _out[i] = _in[item];
           _index[i] = item;
         });
   } else {
@@ -84,10 +77,9 @@ std::tuple<torch::Tensor, torch::Tensor> _ListSamplingProbs(torch::Tensor data,
         num_items, 0);
 
     index = sort_index.slice(0, 0, num_picks, 1);
-    select = data.index({index});
   }
 
-  return std::make_tuple(select, index);
+  return index;
 }
 
 template <typename IdType>
@@ -182,12 +174,10 @@ std::tuple<torch::Tensor, torch::Tensor> _BatchListSamplingProbs(
   return {out_idx, out_range};
 }
 
-std::tuple<torch::Tensor, torch::Tensor> ListSamplingProbsCUDA(
-    torch::Tensor data, torch::Tensor probs, int64_t num_picks, bool replace) {
-  CHECK(data.dtype() == torch::kInt64);
+torch::Tensor ListSamplingProbsCUDA(torch::Tensor probs, int64_t num_picks,
+                                    bool replace) {
   CHECK(probs.dtype() == torch::kFloat);
-  assert(data.numel() == probs.numel());
-  return _ListSamplingProbs<int64_t, float>(data, probs, num_picks, replace);
+  return _ListSamplingProbs<int64_t, float>(probs, num_picks, replace);
 }
 
 std::tuple<torch::Tensor, torch::Tensor> BatchListSamplingProbsCUDA(

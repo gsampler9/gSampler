@@ -41,7 +41,11 @@ torch::Tensor _IndexSelectCPUFromGPU(torch::Tensor array, torch::Tensor index) {
 }
 
 torch::Tensor IndexSelectCPUFromGPU(torch::Tensor array, torch::Tensor index) {
-  return _IndexSelectCPUFromGPU<float, int64_t>(array, index);
+  FLOAT_TYPE_SWITCH(array.scalar_type(), DType, {
+    ID_TYPE_SWITCH(index.scalar_type(), IdType, {
+      return _IndexSelectCPUFromGPU<DType, IdType>(array, index);
+    });
+  });
 }
 }  // namespace impl
 }  // namespace gs

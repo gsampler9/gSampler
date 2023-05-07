@@ -18,7 +18,7 @@ namespace impl {
 template <typename Idx, typename DType, typename BinaryOp,
           bool UseBcast = false, bool UseIdx = false, int LhsTarget = 0,
           int RhsTarget = 2>
-__global__ void SDDMMCooKernel(
+__global__ void SDDMMCOOKernel(
     const DType* __restrict__ lhs, const DType* __restrict__ rhs,
     DType* __restrict__ out, const Idx* __restrict__ row,
     const Idx* __restrict__ col, const Idx* __restrict__ edge_map, int64_t E,
@@ -65,7 +65,7 @@ __global__ void SDDMMCooKernel(
  */
 template <typename Idx, typename DType, bool UseBcast = false,
           bool UseIdx = false, int LhsTarget = 0, int RhsTarget = 2>
-__global__ void SDDMMCooTreeReduceKernel(
+__global__ void SDDMMCOOTreeReduceKernel(
     const DType* __restrict__ lhs, const DType* __restrict__ rhs,
     DType* __restrict__ out, const Idx* __restrict__ row,
     const Idx* __restrict__ col, const Idx* __restrict__ edge_map, int64_t E,
@@ -113,13 +113,13 @@ __global__ void SDDMMCooTreeReduceKernel(
  *       binary search (time complexity O(log N)).
  */
 template <typename Idx, typename DType, typename BinaryOp,
-          bool UseBcast = false, bool UseIdx = false, bool UseNMap = false,
-          int LhsTarget = 0, int RhsTarget = 2>
+          bool UseBcast = false, bool UseIdx = false, int LhsTarget = 0,
+          int RhsTarget = 2>
 __global__ void SDDMMCSCKernel(
     const DType* __restrict__ lhs, const DType* __restrict__ rhs,
     DType* __restrict__ out, const Idx* __restrict__ indptr,
     const Idx* __restrict__ indices, const Idx* __restrict__ edge_map,
-    const Idx* __restrict__ nid_map, int64_t N, int64_t E, int64_t reduce_size,
+    int64_t N, int64_t E, int64_t reduce_size,
     const int64_t* __restrict__ lhs_off, const int64_t* __restrict__ rhs_off,
     int64_t lhs_len, int64_t rhs_len, int64_t out_len) {
   // SDDMM with CSC.
@@ -127,8 +127,7 @@ __global__ void SDDMMCSCKernel(
   const Idx stride_y = blockDim.y * gridDim.y;
   while (ty < E) {
     const Idx src = _ldg(indices + ty);
-    const Idx dst = UseNMap ? _ldg(nid_map + cub::UpperBound(indptr, N, ty) - 1)
-                            : cub::UpperBound(indptr, N, ty) - 1;
+    const Idx dst = cub::UpperBound(indptr, N, ty) - 1;
     const Idx eid = UseIdx ? _ldg(edge_map + ty) : ty;
     int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
     const int64_t stride_x = blockDim.x * gridDim.x;
@@ -163,7 +162,7 @@ __global__ void SDDMMCSCKernel(
  */
 template <typename Idx, typename DType, typename Op, int LhsTarget = 0,
           int RhsTarget = 2>
-void SDDMMCOOCUDA(const BcastOff& bcast, std::shared_ptr<COO> coo,
+void SDDMMCOOCUDA(const BcastOff& bcast, const std::shared_ptr<COO> coo,
                   torch::Tensor lhs, torch::Tensor rhs, torch::Tensor out) {
   const int64_t nnz = coo->row.numel();
   const bool use_idx = coo->e_ids.has_value();
@@ -171,8 +170,8 @@ void SDDMMCOOCUDA(const BcastOff& bcast, std::shared_ptr<COO> coo,
   const Idx* row = coo->row.data_ptr<Idx>();
   const Idx* col = coo->col.data_ptr<Idx>();
   const Idx* edge_map = use_idx ? coo->e_ids.value().data_ptr<Idx>() : nullptr;
-  const DType* lhs_data = lhs.data_ptr<DType>();
-  const DType* rhs_data = rhs.data_ptr<DType>();
+  const DType* lhs_data = Op::use_lhs ? lhs.data_ptr<DType>() : nullptr;
+  const DType* rhs_data = Op::use_rhs ? rhs.data_ptr<DType>() : nullptr;
   DType* out_data = out.data_ptr<DType>();
 
   int64_t *lhs_off = nullptr, *rhs_off = nullptr;
@@ -187,7 +186,7 @@ void SDDMMCOOCUDA(const BcastOff& bcast, std::shared_ptr<COO> coo,
     const dim3 nblks(nbx, nby);
     const dim3 nthrs(ntx, nty);
     BCAST_IDX_CTX_SWITCH(bcast, use_idx, lhs_off, rhs_off, {
-      CUDA_KERNEL_CALL((SDDMMCooTreeReduceKernel<Idx, DType, UseBcast, UseIdx,
+      CUDA_KERNEL_CALL((SDDMMCOOTreeReduceKernel<Idx, DType, UseBcast, UseIdx,
                                                  LhsTarget, RhsTarget>),
                        nblks, nthrs, lhs_data, rhs_data, out_data, row, col,
                        edge_map, nnz, reduce_dim, lhs_off, rhs_off, lhs_len,
@@ -201,7 +200,7 @@ void SDDMMCOOCUDA(const BcastOff& bcast, std::shared_ptr<COO> coo,
     const dim3 nblks(nbx, nby);
     const dim3 nthrs(ntx, nty);
     BCAST_IDX_CTX_SWITCH(bcast, use_idx, lhs_off, rhs_off, {
-      CUDA_KERNEL_CALL((SDDMMCooKernel<Idx, DType, Op, UseBcast, UseIdx,
+      CUDA_KERNEL_CALL((SDDMMCOOKernel<Idx, DType, Op, UseBcast, UseIdx,
                                        LhsTarget, RhsTarget>),
                        nblks, nthrs, lhs_data, rhs_data, out_data, row, col,
                        edge_map, nnz, reduce_dim, lhs_off, rhs_off, lhs_len,
@@ -220,18 +219,15 @@ void SDDMMCOOCUDA(const BcastOff& bcast, std::shared_ptr<COO> coo,
  */
 template <typename Idx, typename DType, typename Op, int LhsTarget = 0,
           int RhsTarget = 2>
-void SDDMMCSCCUDA(const BcastOff& bcast, std::shared_ptr<CSC> csc,
-                  torch::optional<torch::Tensor> n_ids, torch::Tensor lhs,
-                  torch::Tensor rhs, torch::Tensor out) {
+void SDDMMCSCCUDA(const BcastOff& bcast, const std::shared_ptr<CSC> csc,
+                  torch::Tensor lhs, torch::Tensor rhs, torch::Tensor out) {
   const bool use_idx = csc->e_ids.has_value();
-  const bool use_nid = n_ids.has_value();
 
   const Idx* indptr = csc->indptr.data_ptr<Idx>();
   const Idx* indices = csc->indices.data_ptr<Idx>();
   const Idx* edge_map = use_idx ? csc->e_ids.value().data_ptr<Idx>() : nullptr;
-  const Idx* nid_map = use_nid ? n_ids.value().data_ptr<Idx>() : nullptr;
-  const DType* lhs_data = lhs.data_ptr<DType>();
-  const DType* rhs_data = rhs.data_ptr<DType>();
+  const DType* lhs_data = Op::use_lhs ? lhs.data_ptr<DType>() : nullptr;
+  const DType* rhs_data = Op::use_rhs ? rhs.data_ptr<DType>() : nullptr;
   DType* out_data = out.data_ptr<DType>();
   int64_t N = csc->indptr.numel(), E = csc->indices.numel();
 
@@ -247,12 +243,12 @@ void SDDMMCSCCUDA(const BcastOff& bcast, std::shared_ptr<CSC> csc,
   const dim3 nthrs(ntx, nty);
 
   BCAST_IDX_CTX_SWITCH(bcast, use_idx, lhs_off, rhs_off, {
-    SWITCH_IDX(use_idx, use_nid, {
+    SWITCH_IDX(use_idx, {
       CUDA_KERNEL_CALL((SDDMMCSCKernel<Idx, DType, Op, UseBcast, UseIdx,
-                                       UseNMap, LhsTarget, RhsTarget>),
+                                       LhsTarget, RhsTarget>),
                        nblks, nthrs, lhs_data, rhs_data, out_data, indptr,
-                       indices, edge_map, nid_map, N, E, reduce_dim, lhs_off,
-                       rhs_off, lhs_len, rhs_len, len);
+                       indices, edge_map, N, E, reduce_dim, lhs_off, rhs_off,
+                       lhs_len, rhs_len, len);
     });
   });
 }
@@ -261,30 +257,35 @@ void SDDMMCSCCUDA(const BcastOff& bcast, std::shared_ptr<CSC> csc,
  * @brief CUDA implementation of g-SDDMM on CSC format.
  */
 void SDDMMCSC(const std::string& op, const BcastOff& bcast,
-              std::shared_ptr<CSC> csc, torch::optional<torch::Tensor> n_ids,
-              torch::Tensor lhs, torch::Tensor rhs, torch::Tensor out,
-              int lhs_target, int rhs_target) {
-  SWITCH_BITS(32, DType, {
-    SWITCH_OP(op, Op, {
-      SWITCH_TARGET(lhs_target, rhs_target, LhsTarget, RhsTarget, {
-        SDDMMCSCCUDA<int64_t, DType, Op, LhsTarget, RhsTarget>(
-            bcast, csc, n_ids, lhs, rhs, out);
+              const std::shared_ptr<CSC> csc, torch::Tensor lhs,
+              torch::Tensor rhs, torch::Tensor out, int lhs_target,
+              int rhs_target) {
+  ID_TYPE_SWITCH(csc->indices.scalar_type(), IdType, {
+    FLOAT_TYPE_SWITCH(out.scalar_type(), DType, {
+      SWITCH_OP(op, Op, {
+        SWITCH_TARGET(lhs_target, rhs_target, LhsTarget, RhsTarget, {
+          SDDMMCSCCUDA<int64_t, DType, Op, LhsTarget, RhsTarget>(bcast, csc,
+                                                                 lhs, rhs, out);
+        });
       });
     });
   });
 }
 
 /**
- * @brief CUDA implementation of g-SDDMM on Coo format.
+ * @brief CUDA implementation of g-SDDMM on COO format.
  */
 void SDDMMCOO(const std::string& op, const BcastOff& bcast,
-              std::shared_ptr<COO> coo, torch::Tensor lhs, torch::Tensor rhs,
-              torch::Tensor out, int lhs_target, int rhs_target) {
-  SWITCH_BITS(32, DType, {
-    SWITCH_OP(op, Op, {
-      SWITCH_TARGET(lhs_target, rhs_target, LhsTarget, RhsTarget, {
-        SDDMMCOOCUDA<int64_t, DType, Op, LhsTarget, RhsTarget>(bcast, coo, lhs,
-                                                               rhs, out);
+              const std::shared_ptr<COO> coo, torch::Tensor lhs,
+              torch::Tensor rhs, torch::Tensor out, int lhs_target,
+              int rhs_target) {
+  ID_TYPE_SWITCH(coo->row.scalar_type(), IdType, {
+    FLOAT_TYPE_SWITCH(out.scalar_type(), DType, {
+      SWITCH_OP(op, Op, {
+        SWITCH_TARGET(lhs_target, rhs_target, LhsTarget, RhsTarget, {
+          SDDMMCOOCUDA<IdType, DType, Op, LhsTarget, RhsTarget>(bcast, coo, lhs,
+                                                                rhs, out);
+        });
       });
     });
   });

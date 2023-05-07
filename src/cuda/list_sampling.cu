@@ -18,38 +18,31 @@ namespace impl {
  * @return std::tuple<torch::Tensor, torch::Tensor>
  */
 template <typename IdType>
-std::tuple<torch::Tensor, torch::Tensor> _ListSampling(torch::Tensor data,
-                                                       int64_t num_picks,
-                                                       bool replace) {
-  int num_items = data.numel();
+torch::Tensor _ListSampling(int64_t num_items, int64_t num_picks,
+                            bool replace) {
   torch::TensorOptions index_options =
       torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA);
 
   if (num_items <= num_picks and !replace) {
     // todo (ping), do we need clone here?
-    return std::make_tuple(data, torch::arange(num_items, index_options));
+    return torch::arange(num_items, index_options);
   }
 
-  torch::Tensor select;
   torch::Tensor index;
 
   if (replace) {
-    select = torch::empty(num_picks, data.options());
     index = torch::empty(num_picks, index_options);
 
     uint64_t random_seed = 7777;
     using it = thrust::counting_iterator<IdType>;
-    thrust::for_each(
-        it(0), it(num_picks),
-        [in = data.data_ptr<IdType>(), out_data = select.data_ptr<IdType>(),
-         out_index = index.data_ptr<int64_t>(), num_items, num_picks,
-         random_seed] __device__(IdType i) mutable {
-          curandState rng;
-          curand_init(i * random_seed, 0, 0, &rng);
-          int64_t _id = curand(&rng) % num_items;
-          out_data[i] = in[_id];
-          out_index[i] = _id;
-        });
+    thrust::for_each(it(0), it(num_picks),
+                     [out_index = index.data_ptr<int64_t>(), num_items,
+                      num_picks, random_seed] __device__(IdType i) mutable {
+                       curandState rng;
+                       curand_init(i * random_seed, 0, 0, &rng);
+                       int64_t _id = curand(&rng) % num_items;
+                       out_index[i] = _id;
+                     });
 
   } else {
     index = torch::arange(num_picks, index_options);
@@ -69,17 +62,14 @@ std::tuple<torch::Tensor, torch::Tensor> _ListSampling(torch::Tensor data,
                          AtomicMax(out_index + num, idx);
                        }
                      });
-
-    select = data.index({index});
   }
 
-  return std::make_tuple(select, index);
+  return index;
 }
 
-std::tuple<torch::Tensor, torch::Tensor> ListSamplingCUDA(torch::Tensor data,
-                                                          int64_t num_picks,
-                                                          bool replace) {
-  return _ListSampling<int64_t>(data, num_picks, replace);
+torch::Tensor ListSamplingCUDA(int64_t num_items, int64_t num_picks,
+                               bool replace) {
+  return _ListSampling<int64_t>(num_items, num_picks, replace);
 }
 
 }  // namespace impl

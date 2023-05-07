@@ -104,27 +104,13 @@
     }                                                                  \
   } while (0)
 
-#define SWITCH_IDX(EDGE_MAP, NODE_MAP, ...) \
-  do {                                      \
-    if ((EDGE_MAP)) {                       \
-      constexpr bool UseEMap = true;        \
-      if ((NODE_MAP)) {                     \
-        constexpr bool UseNMap = true;      \
-        { __VA_ARGS__ }                     \
-      } else {                              \
-        constexpr bool UseNMap = false;     \
-        { __VA_ARGS__ }                     \
-      }                                     \
-    } else {                                \
-      constexpr bool UseEMap = false;       \
-      if ((NODE_MAP)) {                     \
-        constexpr bool UseNMap = true;      \
-        { __VA_ARGS__ }                     \
-      } else {                              \
-        constexpr bool UseNMap = false;     \
-        { __VA_ARGS__ }                     \
-      }                                     \
-    }                                       \
+#define SWITCH_IDX(EDGE_MAP, ...)     \
+  do {                                \
+    if ((EDGE_MAP)) {                 \
+      constexpr bool UseEMap = true;  \
+    } else {                          \
+      constexpr bool UseEMap = false; \
+    }                                 \
   } while (0)
 
 #endif
