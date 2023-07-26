@@ -108,8 +108,10 @@
   do {                                \
     if ((EDGE_MAP)) {                 \
       constexpr bool UseEMap = true;  \
+      { __VA_ARGS__ }                 \
     } else {                          \
       constexpr bool UseEMap = false; \
+      { __VA_ARGS__ }                 \
     }                                 \
   } while (0)
 

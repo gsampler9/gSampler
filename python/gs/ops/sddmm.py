@@ -1,25 +1,92 @@
 from itertools import product
 import sys
+import torch
 
-from .sparse import gsddmm as gsddmm_internal
 from ..format import _COO, _CSC, _CSR
+
+torch.fx.wrap("_before_sddmm")
+torch.fx.wrap("_after_sddmm")
 
 __all__ = ["gsddmm"]
 
 
-def reshape_lhs_rhs(lhs_data, rhs_data):
-    r"""Expand dims so that there will be no broadcasting issues with different
-    number of dimensions. For example, given two shapes (N, 3, 1), (E, 5, 3, 4)
-    that are valid broadcastable shapes, change them to (N, 1, 3, 1) and
-    (E, 5, 3, 4)
+target_mapping = {"u": 0, "e": 1, "v": 2, "src": 0, "edge": 1, "dst": 2}
 
-    Parameters
-    ----------
-    lhs_data : tensor or None
-        The left operand, could be None if it's not required by op.
-    rhs_data : tensor or None
-        The right operand, could be None if it's not required by op.
-    """
+
+def _before_sddmm(num_edges, op, lhs_data, rhs_data):
+    if op not in ["copy_lhs", "copy_rhs"]:
+        lhs_data, rhs_data = reshape_lhs_rhs(lhs_data, rhs_data)
+
+    if op == "sub":
+        op = "add"
+        rhs_data = -rhs_data
+    if op == "div":
+        op = "mul"
+        rhs_data = 1.0 / rhs_data
+
+    lhs = lhs_data
+    rhs = rhs_data
+
+    use_lhs = op != "copy_rhs"
+    use_rhs = op != "copy_lhs"
+    if use_lhs and use_rhs:
+        if lhs.device != rhs.device:
+            raise "The operands data device don't match: {} and {}, please move them to the same device.".format(
+                lhs.device, rhs.device
+            )
+        if lhs.dtype != rhs.dtype:
+            raise "The operands data type don't match: {} and {}, please convert them to the same type.".format(
+                lhs.dtype, rhs.dtype
+            )
+
+    # deal with scalar features.
+    expand_lhs, expand_rhs = False, False
+    if use_lhs and lhs.dim() == 1:
+        lhs = torch.unsqueeze(lhs, -1)
+        expand_lhs = True
+    if use_rhs and rhs.dim() == 1:
+        rhs = torch.unsqueeze(rhs, -1)
+        expand_rhs = True
+
+    device = lhs.device if use_lhs else rhs.device
+    dtype = lhs.dtype if use_lhs else rhs.dtype
+    lhs_shp = lhs.shape if use_lhs else (0,)
+    rhs_shp = rhs.shape if use_rhs else (0,)
+    out_shp = (num_edges,) + infer_broadcast_shape(op, lhs_shp[1:], rhs_shp[1:])
+    out = torch.zeros(out_shp, dtype=dtype, device=device)
+    condition = (expand_lhs or not use_lhs) and (expand_rhs or not use_rhs)
+
+    return (lhs, rhs, out, condition)
+
+
+def _after_sddmm(out, condition):
+    if condition:
+        out = torch.squeeze(out, -1)
+    return out
+
+
+def infer_broadcast_shape(op, shp1, shp2):
+    pad_shp1, pad_shp2 = shp1, shp2
+    if op == "dot":
+        if shp1[-1] != shp2[-1]:
+            raise "Dot operator is only available for arrays with the same size on last dimension, but got {} and {}.".format(
+                shp1, shp2
+            )
+    # operands are padded to have the same dimensionality with leading 1's.
+    if len(shp1) > len(shp2):
+        pad_shp2 = (1,) * (len(shp1) - len(shp2)) + shp2
+    elif len(shp1) < len(shp2):
+        pad_shp1 = (1,) * (len(shp2) - len(shp1)) + shp1
+    for d1, d2 in zip(pad_shp1, pad_shp2):
+        if d1 != d2 and d1 != 1 and d2 != 1:
+            raise "Feature shapes {} and {} are not valid for broadcasting.".format(
+                shp1, shp2
+            )
+    rst = tuple(max(d1, d2) for d1, d2 in zip(pad_shp1, pad_shp2))
+    return rst[:-1] + (1,) if op == "dot" else rst
+
+
+def reshape_lhs_rhs(lhs_data, rhs_data):
     lhs_shape = lhs_data.shape
     rhs_shape = rhs_data.shape
     if len(lhs_shape) != len(rhs_shape):
@@ -34,44 +101,13 @@ def reshape_lhs_rhs(lhs_data, rhs_data):
 
 
 def gsddmm(g, op, lhs_data, rhs_data, lhs_target="u", rhs_target="v", on_format=_COO):
-    r"""Generalized Sampled-Dense-Dense Matrix Multiplication interface.
-    It computes edge features by :attr:`op` lhs features and rhs features.
-
-    .. math::
-
-        x_{e} = \phi(x_{lhs}, x_{rhs}), \forall (u,e,v)\in \mathcal{G}
-
-    where :math:`x_{e}` is the returned feature on edges and :math:`x_u`,
-    :math:`x_v` refers to :attr:`u`, :attr:`v` respectively. :math:`\phi`
-    is the binary operator :attr:`op`, and :math:`\mathcal{G}` is the graph
-    we apply gsddmm on: :attr:`g`. :math:`lhs` and :math:`rhs` are one of
-    :math:`u,v,e`'s.
-
-    Parameters
-    ----------
-    g : gs.Matrix
-        The input graph.
-    op : str
-        Binary operator, could be ``add``, ``sub``, ``mul``, ``div``, ``dot``.
-    lhs_data : tensor or None
-        The left operand, could be None if it's not required by op.
-    rhs_data : tensor or None
-        The right operand, could be None if it's not required by op.
-    lhs_target: str
-        Choice of ``u``(source), ``e``(edge) or ``v``(destination) for left operand.
-    rhs_target: str
-        Choice of ``u``(source), ``e``(edge) or ``v``(destination) for right operand.
-
-    Returns
-    -------
-    tensor
-        The result tensor.
-    """
-    if op not in ["copy_lhs", "copy_rhs"]:
-        lhs_data, rhs_data = reshape_lhs_rhs(lhs_data, rhs_data)
-    return gsddmm_internal(
-        g._graph, op, lhs_data, rhs_data, lhs_target, rhs_target, on_format
-    )
+    num_edges = g._graph._CAPI_GetNumEdges()
+    lhs_target = target_mapping[lhs_target]
+    rhs_target = target_mapping[rhs_target]
+    (lhs, rhs, out, condition) = _before_sddmm(num_edges, op, lhs_data, rhs_data)
+    g._graph._CAPI_SDDMM(op, lhs, rhs, out, lhs_target, rhs_target, on_format)
+    out = _after_sddmm(out, condition)
+    return out
 
 
 def _gen_sddmm_func(lhs_target, rhs_target, binary_op):

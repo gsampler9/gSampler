@@ -1,6 +1,8 @@
 #ifndef GS_CUDA_FUSION_EDGE_MAP_REDUCE_H_
 #define GS_CUDA_FUSION_EDGE_MAP_REDUCE_H_
 #include <torch/torch.h>
+#include "bcast.h"
+#include "graph.h"
 
 namespace gs {
 namespace impl {

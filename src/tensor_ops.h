@@ -2,6 +2,7 @@
 #define GS_TENSOR_OPS_H_
 
 #include <torch/script.h>
+#include "cuda/batch/batch_ops.h"
 
 namespace gs {
 
@@ -18,5 +19,12 @@ torch::Tensor ListSampling(int64_t num_items, int64_t num_picks, bool replace);
 
 torch::Tensor ListSamplingProbs(torch::Tensor probs, int64_t num_picks,
                                 bool replace);
+
+std::tuple<torch::Tensor, torch::Tensor> BatchListSamplingProbs(
+    torch::Tensor probs, int64_t num_picks, bool replace, torch::Tensor range);
+
+std::tuple<torch::Tensor, torch::Tensor> BatchListSampling(int64_t num_picks,
+                                                           bool replace,
+                                                           torch::Tensor range);
 }  // namespace gs
 #endif

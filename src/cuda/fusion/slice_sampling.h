@@ -5,15 +5,10 @@
 namespace gs {
 namespace impl {
 namespace fusion {
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 FusedCSCColSlicingSamplingCUDA(torch::Tensor indptr, torch::Tensor indices,
-                               torch::Tensor column_ids, int64_t fanout,
-                               bool replace);
-
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
-FusedCSCColSlicingSamplingOneKeepDimCUDA(torch::Tensor indptr,
-                                         torch::Tensor indices,
-                                         torch::Tensor column_ids);
+                               int64_t fanout, torch::Tensor node_ids,
+                               bool replace, bool with_coo);
 }  // namespace fusion
 }  // namespace impl
 }  // namespace gs

@@ -93,14 +93,99 @@ class Graph : public torch::CustomClassHolder {
             torch::Tensor argu, torch::Tensor arge, int64_t u_target,
             int64_t on_format);
 
-  std::tuple<torch::Tensor, int64_t, int64_t, torch::Tensor, torch::Tensor,
-             torch::optional<torch::Tensor>, std::string>
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Compact(int64_t axis);
+
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor,
+             torch::optional<torch::Tensor>>
   GraphRelabel(torch::Tensor col_seeds, torch::Tensor row_ids);
   torch::Tensor GetValidNodes(torch::Tensor col_seeds, torch::Tensor row_ids);
 
   torch::Tensor RandomWalk(torch::Tensor seeds, int64_t walk_length);
   torch::Tensor Node2Vec(torch::Tensor seeds, int64_t walk_length, double p,
                          double q);
+
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> FusedSlicingSampling(
+      int64_t axis, torch::Tensor seeds, int64_t fanout, bool replace,
+      int64_t on_format, int64_t output_format);
+
+  void FusedUOPV(const std::string& op, torch::Tensor lhs1, torch::Tensor rhs1,
+                 torch::Tensor out1, torch::Tensor lhs2, torch::Tensor rhs2,
+                 torch::Tensor out2, int64_t on_format);
+  void FusedESquareSum(const std::string& op, const std::string& reduce,
+                       torch::Tensor ufeat, torch::Tensor efeat,
+                       torch::Tensor out, torch::Tensor argu,
+                       torch::Tensor arge, int64_t u_target, int64_t on_format);
+  void FusedEDivUSum(const std::string& op, const std::string& reduce,
+                     torch::Tensor ufeat, torch::Tensor efeat,
+                     torch::Tensor out, torch::Tensor argu, torch::Tensor arge,
+                     int64_t u_target, int64_t on_format);
+
+  // todo: current batch graph will disable graph compaction and the graph
+  // formats must be in [CSC, COO]
+
+  // batch api
+  void SetEdgeBptr(torch::Tensor bptr) { edge_bptr_ = bptr; }
+  void SetColBptr(torch::Tensor bptr) { col_bptr_ = bptr; }
+  torch::Tensor GetEdgeBptr() { return edge_bptr_; }
+  torch::Tensor GetColBptr() { return col_bptr_; }
+
+  std::tuple<torch::Tensor, torch::Tensor> BatchGetCSCIndptr() {
+    CreateSparseFormat(_CSC);
+    return {csc_->indptr, col_bptr_};
+  };
+  std::tuple<torch::Tensor, torch::Tensor> BatchGetCSCIndices() {
+    CreateSparseFormat(_CSC);
+    return {csc_->indices, edge_bptr_};
+  };
+  std::tuple<torch::Tensor, torch::Tensor> BatchGetCSCEids() {
+    CreateSparseFormat(_CSC);
+    if (csc_->e_ids.has_value()) {
+      return {csc_->e_ids.value(), edge_bptr_};
+    } else {
+      return {torch::Tensor(), torch::Tensor()};
+    }
+  };
+  std::tuple<torch::Tensor, torch::Tensor> BatchGetCOORows() {
+    CreateSparseFormat(_COO);
+    return {coo_->row, edge_bptr_};
+  };
+  std::tuple<torch::Tensor, torch::Tensor> BatchGetCOOCols() {
+    CreateSparseFormat(_COO);
+    return {coo_->col, edge_bptr_};
+  };
+  std::tuple<torch::Tensor, torch::Tensor> BatchGetCOOEids() {
+    CreateSparseFormat(_COO);
+    if (coo_->e_ids.has_value()) {
+      return {coo_->e_ids.value(), edge_bptr_};
+    } else {
+      return {torch::Tensor(), torch::Tensor()};
+    }
+  };
+
+  std::vector<int64_t> BatchGetColCounts() {
+    int num_item = col_bptr_.numel() - 1;
+    auto count =
+        col_bptr_.slice(0, 1, num_item + 1) - col_bptr_.slice(0, 0, num_item);
+    auto cpu_count = count.to(torch::kLong).to(torch::kCPU);
+    return std::vector<int64_t>(cpu_count.data_ptr<int64_t>(),
+                                cpu_count.data_ptr<int64_t>() + num_item);
+  };
+
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchColSlicing(
+      torch::Tensor seeds, torch::Tensor batch_ptr, bool encoding);
+
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchRowSampling(
+      int64_t fanout, bool replace);
+
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchRowSamplingProbs(
+      int64_t fanout, bool replace, torch::Tensor edge_probs);
+
+  std::tuple<std::vector<torch::Tensor>, std::vector<torch::Tensor>,
+             std::vector<torch::Tensor>, std::vector<torch::Tensor>>
+  BatchGraphRelabel(torch::Tensor col_seeds, torch::Tensor row_ids);
+
+  std::tuple<torch::Tensor, torch::Tensor> BatchGetValidNodes(
+      torch::Tensor col_seeds, torch::Tensor row_ids);
 
  private:
   int64_t num_cols_ = 0;   // total number of cols in matrix
@@ -109,6 +194,9 @@ class Graph : public torch::CustomClassHolder {
   std::shared_ptr<CSC> csc_;
   std::shared_ptr<CSR> csr_;
   std::shared_ptr<COO> coo_;
+
+  // batch attr
+  torch::Tensor col_bptr_, edge_bptr_;
 };
 
 }  // namespace gs

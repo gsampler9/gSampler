@@ -111,7 +111,7 @@ void COOSum(torch::Tensor target, torch::optional<torch::Tensor> e_ids,
   const int nby = FindNumBlocks<'y'>((E + nty - 1) / nty);
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
-  SWITCH_IDX(use_e_map, false, {
+  SWITCH_IDX(use_e_map, {
     CUDA_KERNEL_CALL((_SegmentSumCOOKernel<IdType, DType, UseEMap>), nblks,
                      nthrs, target.data_ptr<IdType>(), e_ids_map,
                      data.data_ptr<DType>(), E, powk, out_len,
@@ -173,7 +173,7 @@ void CSCNormalize(torch::Tensor indptr, torch::optional<torch::Tensor> e_ids,
   const int nbx = (num_element + nty - 1) / nty;
   const dim3 nblks(nbx, nby);
   const dim3 nthrs(ntx, nty);
-  SWITCH_IDX(use_e_map, false, {
+  SWITCH_IDX(use_e_map, {
     CUDA_KERNEL_CALL((_SegmentNormalizeKernel<IdType, DType, UseEMap>), nblks,
                      nthrs, indptr.data_ptr<IdType>(), e_ids_map,
                      data.data_ptr<DType>(), num_element, out_len,

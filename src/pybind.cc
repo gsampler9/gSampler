@@ -1,10 +1,9 @@
 #include <torch/custom_class.h>
 #include <torch/script.h>
 
-#include "./graph.h"
-#include "./graph_ops.h"
-#include "./tensor_ops.h"
-#include "cuda/tensor_ops.h"
+#include "graph.h"
+#include "graph_ops.h"
+#include "tensor_ops.h"
 using namespace gs;
 
 TORCH_LIBRARY(gs_classes, m) {
@@ -32,13 +31,35 @@ TORCH_LIBRARY(gs_classes, m) {
       .def("_CAPI_Node2Vec", &Graph::Node2Vec)
       .def("_CAPI_SDDMM", &Graph::SDDMM)
       .def("_CAPI_SpMM", &Graph::SpMM)
+      .def("_CAPI_Compact", &Graph::Compact)
       .def("_CAPI_GraphRelabel", &Graph::GraphRelabel)
-      .def("_CAPI_GetValidNodes", &Graph::GetValidNodes);
+      .def("_CAPI_GetValidNodes", &Graph::GetValidNodes)
+      .def("_CAPI_SlicingSampling", &Graph::FusedSlicingSampling)
+      .def("_CAPI_FusedUOPV", &Graph::FusedUOPV)
+      .def("_CAPI_FusedESquareSum", &Graph::FusedESquareSum)
+      .def("_CAPI_FusedEDivUSum", &Graph::FusedEDivUSum)
+      .def("_CAPI_BatchColSlicing", &Graph::BatchColSlicing)
+      .def("_CAPI_BatchRowSampling", &Graph::BatchRowSampling)
+      .def("_CAPI_BatchRowSamplingProbs", &Graph::BatchRowSamplingProbs)
+      .def("_CAPI_BatchGraphRelabel", &Graph::BatchGraphRelabel)
+      .def("_CAPI_GetEdgeBptr", &Graph::GetEdgeBptr)
+      .def("_CAPI_GetColBptr", &Graph::GetColBptr)
+      .def("_CAPI_BatchGetCSCIndptr", &Graph::BatchGetCSCIndptr)
+      .def("_CAPI_BatchGetCSCIndices", &Graph::BatchGetCSCIndices)
+      .def("_CAPI_BatchGetCSCEids", &Graph::BatchGetCSCEids)
+      .def("_CAPI_BatchGetCOORows", &Graph::BatchGetCOORows)
+      .def("_CAPI_BatchGetCOOCols", &Graph::BatchGetCOORows)
+      .def("_CAPI_BatchGetCOOEids", &Graph::BatchGetCOOEids)
+      .def("_CAPI_BatchGetColCounts", &Graph::BatchGetColCounts)
+      .def("_CAPI_BatchGetValidNodes", &Graph::BatchGetValidNodes);
 }
 
 TORCH_LIBRARY(gs_ops, m) {
   m.def("_CAPI_ListSampling", &ListSampling);
   m.def("_CAPI_ListSamplingWithProbs", &ListSamplingProbs);
+  m.def("_CAPI_BatchListSamplingWithProbs", &BatchListSamplingProbs);
+  m.def("_CAPI_BatchListSampling", &BatchListSampling);
+  m.def("_CAPI_BatchSplitByOffset", &gs::impl::batch::SplitByOffset);
 }
 
 namespace gs {}

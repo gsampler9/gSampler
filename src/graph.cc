@@ -4,6 +4,12 @@
 #include "bcast.h"
 #include "cuda/fusion/column_row_slicing.h"
 #include "cuda/fusion/edge_map_reduce.h"
+#include "cuda/fusion/fused_coo_e_div_u_sum.h"
+#include "cuda/fusion/fused_coo_e_square_sum.h"
+#include "cuda/fusion/fused_coo_u_op_v.h"
+#include "cuda/fusion/fused_csc_e_div_u_sum.h"
+#include "cuda/fusion/fused_csc_e_square_sum.h"
+#include "cuda/fusion/fused_csc_u_op_v.h"
 #include "cuda/graph_ops.h"
 #include "cuda/sddmm.h"
 #include "cuda/spmm.h"
@@ -183,7 +189,7 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::Sampling(
   auto ret = c10::intrusive_ptr<Graph>(
       std::unique_ptr<Graph>(new Graph(num_rows_, num_cols_)));
 
-  if (axis == 0 && on_format == _CSC) {
+  if (axis == 1 && on_format == _CSC) {
     CHECK(output_format != _CSR)
         << "Error in Sampling, Not implementation [on_format = CSC, "
            "output_forat = CSR] !";
@@ -201,7 +207,7 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::Sampling(
 
     e_ids = csc_->e_ids;
     ret->SetNumEdges(select_index.numel());
-  } else if (axis == 1 && on_format == _CSR) {
+  } else if (axis == 0 && on_format == _CSR) {
     CHECK(output_format != _CSC)
         << "Error in Sampling, Not implementation [on_format = CSR, "
            "output_forat = CSC] !";
@@ -241,15 +247,17 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::SamplingProbs(
   torch::Tensor select_index;
   std::shared_ptr<_TMP> tmp_ptr = nullptr;
   bool with_coo = output_format & _COO;
+  torch::optional<torch::Tensor> e_ids = torch::nullopt;
 
   // sampling does not change the shape of graph/matrix
   auto ret = c10::intrusive_ptr<Graph>(
       std::unique_ptr<Graph>(new Graph(num_rows_, num_cols_)));
 
-  if (axis == 0 && on_format == _CSC) {
+  if (axis == 1 && on_format == _CSC) {
     CHECK(output_format != _CSR)
         << "Error in SamplingProbs, Not implementation [on_format = CSC, "
            "output_forat = CSR] !";
+    e_ids = csc_->e_ids;
 
     std::tie(tmp_ptr, select_index) =
         CSCColSamplingProbs(csc_, edge_probs, fanout, replace, with_coo);
@@ -263,10 +271,11 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::SamplingProbs(
                                             torch::nullopt, false, true}));
 
     ret->SetNumEdges(select_index.numel());
-  } else if (axis == 1 && on_format == _CSR) {
+  } else if (axis == 0 && on_format == _CSR) {
     CHECK(output_format != _CSC)
         << "Error in SamplingProbs, Not implementation [on_format = CSR, "
            "output_forat = CSC] !";
+    e_ids = csr_->e_ids;
 
     std::tie(tmp_ptr, select_index) =
         CSCColSamplingProbs(csr_, edge_probs, fanout, replace, with_coo);
@@ -286,7 +295,13 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::SamplingProbs(
                  << ", output_forat = " << output_format << "] !";
   }
 
-  return {ret, select_index};
+  torch::Tensor split_index;
+  if (e_ids.has_value()) {
+    split_index = e_ids.value().index_select(0, select_index);
+  } else {
+    split_index = select_index;
+  }
+  return {ret, split_index};
 }
 
 torch::Tensor Graph::RandomWalk(torch::Tensor seeds, int64_t walk_length) {
@@ -302,6 +317,8 @@ torch::Tensor Graph::Node2Vec(torch::Tensor seeds, int64_t walk_length,
 void Graph::SDDMM(const std::string& op, torch::Tensor lhs, torch::Tensor rhs,
                   torch::Tensor out, int64_t lhs_target, int64_t rhs_target,
                   int64_t on_format) {
+  if (!(num_edges_ > 0)) return;
+
   CreateSparseFormat(on_format);
   const auto& bcast = CalcBcastOff(op, lhs, rhs);
   if (on_format == _COO) {
@@ -317,17 +334,36 @@ void Graph::SDDMM(const std::string& op, torch::Tensor lhs, torch::Tensor rhs,
   }
 }
 
+/*! \brief Generalized Sampled Dense-Dense Matrix Multiplication. */
+void Graph::FusedUOPV(const std::string& op, torch::Tensor lhs1,
+                      torch::Tensor rhs1, torch::Tensor out1,
+                      torch::Tensor lhs2, torch::Tensor rhs2,
+                      torch::Tensor out2, int64_t on_format) {
+  CreateSparseFormat(on_format);
+  const auto& bcast = CalcBcastOff(op, lhs1, rhs1);
+  if (on_format == _COO) {
+    impl::fusion::FUSED_COO_U_OP_V(op, bcast, coo_, lhs1, rhs1, out1, lhs2,
+                                   rhs2, out2);
+  } else if (on_format == _CSC) {
+    impl::fusion::FUSED_CSC_U_OP_V(op, bcast, csc_, lhs1, rhs1, out1, lhs2,
+                                   rhs2, out2);
+  } else {
+    LOG(FATAL) << "fused SDDMM only supports CSC and COO formats";
+  }
+}
+
 /*! \brief Generalized Sparse-Dense Matrix Multiplication. */
 void Graph::SpMM(const std::string& op, const std::string& reduce,
                  torch::Tensor ufeat, torch::Tensor efeat, torch::Tensor out,
                  torch::Tensor argu, torch::Tensor arge, int64_t u_target,
                  int64_t on_format) {
+  if (!(num_edges_ > 0)) return;
+
   CreateSparseFormat(on_format);
   const auto& bcast = CalcBcastOff(op, ufeat, efeat);
   if (u_target != 0 && u_target != 2) LOG(FATAL) << "Invalid u_target";
 
   if (on_format == _COO) {
-    LOG(INFO) << op << " " << reduce;
     impl::SpMMCOO(op, reduce, bcast, coo_, ufeat, efeat, out, u_target,
                   {argu, arge});
   } else if (on_format == _CSR && u_target == 2) {
@@ -339,49 +375,212 @@ void Graph::SpMM(const std::string& op, const std::string& reduce,
   }
 }
 
-std::tuple<torch::Tensor, int64_t, int64_t, torch::Tensor, torch::Tensor,
-           torch::optional<torch::Tensor>, std::string>
-Graph::GraphRelabel(torch::Tensor col_seeds, torch::Tensor row_ids) {
-  if (csc_ != nullptr) {
-    torch::Tensor row_indices =
-        row_ids.numel() > 0 ? row_ids.index({csc_->indices}) : csc_->indices;
+// axis = 0 for row index and sample column;
+// axis = 1 for column index and sample row;
+std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor>
+Graph::FusedSlicingSampling(int64_t axis, torch::Tensor seeds, int64_t fanout,
+                            bool replace, int64_t on_format,
+                            int64_t output_format) {
+  CreateSparseFormat(on_format);
+  torch::Tensor select_index;
+  std::shared_ptr<_TMP> tmp_ptr = nullptr;
+  bool with_coo = output_format & _COO;
+  torch::optional<torch::Tensor> e_ids = torch::nullopt;
 
-    torch::Tensor frontier;
-    std::vector<torch::Tensor> relabeled_result;
+  int64_t new_num_cols, new_num_rows;
+  if (axis == 0) {
+    new_num_cols = num_cols_;
+    new_num_rows = seeds.numel();
+  } else {
+    new_num_cols = seeds.numel();
+    new_num_rows = num_rows_;
+  }
+  auto ret = c10::intrusive_ptr<Graph>(
+      std::unique_ptr<Graph>(new Graph(new_num_rows, new_num_cols)));
 
-    std::tie(frontier, relabeled_result) =
-        impl::TensorRelabelCUDA({col_seeds, row_indices}, {row_indices});
+  if (axis == 0 && on_format == _CSR) {
+    CHECK(output_format != _CSC) << "Error in FusedSlicingSampling, Not "
+                                    "implementation [on_format = CSR, "
+                                    "output_forat = CSC] !";
+    e_ids = csr_->e_ids;
 
-    torch::Tensor relabeled_indptr = csc_->indptr.clone();
-    torch::Tensor relabeled_indices = relabeled_result[0];
+    std::tie(tmp_ptr, select_index) =
+        CSCSlicingSampling(csr_, seeds, fanout, replace, with_coo);
 
-    return {frontier,
-            frontier.numel(),
-            col_seeds.numel(),
-            relabeled_indptr,
-            relabeled_indices,
-            csc_->e_ids,
-            "csc"};
+    if (output_format & _CSR)
+      ret->SetCSR(std::make_shared<CSR>(
+          CSR{tmp_ptr->indptr, tmp_ptr->coo_in_indices, torch::nullopt}));
+    if (output_format & _COO)
+      ret->SetCOO(std::make_shared<COO>(COO{tmp_ptr->coo_in_indptr,
+                                            tmp_ptr->coo_in_indices,
+                                            torch::nullopt, true, false}));
+
+    ret->SetNumEdges(select_index.numel());
+
+  } else if (axis == 1 && on_format == _CSC) {
+    CHECK(output_format != _CSR) << "Error in FusedSlicingSampling, Not "
+                                    "implementation [on_format = CSC, "
+                                    "output_forat = CSR] !";
+    e_ids = csc_->e_ids;
+
+    std::tie(tmp_ptr, select_index) =
+        CSCSlicingSampling(csc_, seeds, fanout, replace, with_coo);
+    if (output_format & _CSC)
+      ret->SetCSC(std::make_shared<CSC>(
+          CSC{tmp_ptr->indptr, tmp_ptr->coo_in_indices, torch::nullopt}));
+    if (output_format & _COO)
+      ret->SetCOO(std::make_shared<COO>(COO{tmp_ptr->coo_in_indices,
+                                            tmp_ptr->coo_in_indptr,
+                                            torch::nullopt, false, true}));
+
+    ret->SetNumEdges(select_index.numel());
 
   } else {
-    CreateSparseFormat(_COO);
-    torch::Tensor coo_col = col_seeds.index({coo_->col});
-    torch::Tensor coo_row =
-        row_ids.numel() > 0 ? row_ids.index({coo_->row}) : coo_->row;
-
-    torch::Tensor frontier;
-    std::vector<torch::Tensor> relabeled_result;
-    std::tie(frontier, relabeled_result) =
-        impl::TensorRelabelCUDA({col_seeds, coo_row}, {coo_col, coo_row});
-
-    return {frontier,
-            frontier.numel(),
-            col_seeds.numel(),
-            relabeled_result[1],
-            relabeled_result[0],
-            coo_->e_ids,
-            "coo"};
+    CHECK(false) << "Error in FusedSlicingSampling, Not implementation [axis = "
+                 << axis << ", on_format = " << on_format
+                 << ", output_forat = " << output_format << "] !";
   }
+
+  torch::Tensor split_index;
+  if (e_ids.has_value()) {
+    split_index = e_ids.value().index_select(0, select_index);
+  } else {
+    split_index = select_index;
+  }
+  return {ret, split_index};
+}
+
+/*! \brief Generalized Sparse-Dense Matrix Multiplication. */
+void Graph::FusedESquareSum(const std::string& op, const std::string& reduce,
+                            torch::Tensor ufeat, torch::Tensor efeat,
+                            torch::Tensor out, torch::Tensor argu,
+                            torch::Tensor arge, int64_t u_target,
+                            int64_t on_format) {
+  CreateSparseFormat(on_format);
+  const auto& bcast = CalcBcastOff(op, ufeat, efeat);
+  if (u_target != 0 && u_target != 2) LOG(FATAL) << "Invalid u_target";
+  if (on_format == _COO) {
+    impl::fusion::ESquareSumCOO(op, reduce, bcast, coo_, ufeat, efeat, out,
+                                {argu, arge});
+  } else if (on_format == _CSR && u_target == 2) {
+    impl::fusion::ESquareSumCSC(op, reduce, bcast, csr_, ufeat, efeat, out,
+                                {argu, arge});
+  } else if (on_format == _CSC && u_target == 0) {
+    impl::fusion::ESquareSumCSC(op, reduce, bcast, csc_, ufeat, efeat, out,
+                                {argu, arge});
+  } else {
+    LOG(FATAL) << "SpMM Error:CSC, CSR and u_target mismatch";
+  }
+}
+
+/*! \brief Generalized Sparse-Dense Matrix Multiplication. */
+void Graph::FusedEDivUSum(const std::string& op, const std::string& reduce,
+                          torch::Tensor ufeat, torch::Tensor efeat,
+                          torch::Tensor out, torch::Tensor argu,
+                          torch::Tensor arge, int64_t u_target,
+                          int64_t on_format) {
+  CreateSparseFormat(on_format);
+  const auto& bcast = CalcBcastOff(op, ufeat, efeat);
+  if (u_target != 0 && u_target != 2) LOG(FATAL) << "Invalid u_target";
+
+  if (on_format == _COO) {
+    LOG(INFO) << op << " " << reduce;
+    impl::fusion::EDivUSumCOO(op, reduce, bcast, coo_, ufeat, efeat, out,
+                              {argu, arge});
+
+  } else if (on_format == _CSR && u_target == 2) {
+    impl::fusion::EDivUSumCSC(op, reduce, bcast, csr_, ufeat, efeat, out,
+                              {argu, arge});
+  } else if (on_format == _CSC && u_target == 0) {
+    impl::fusion::EDivUSumCSC(op, reduce, bcast, csc_, ufeat, efeat, out,
+                              {argu, arge});
+  } else {
+    LOG(FATAL) << "SpMM Error:CSC, CSR and u_target mismatch";
+  }
+}
+
+// axis = 0 for row, 1 for col
+// AxisUnique can only be called after Slicing
+// return graph is to disbale some fusion
+std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::Compact(
+    int64_t axis) {
+  torch::Tensor frontiers;
+  std::shared_ptr<CSC> csc_ptr = nullptr;
+  std::shared_ptr<COO> coo_ptr = nullptr;
+  std::shared_ptr<CSR> csr_ptr = nullptr;
+  int64_t new_num_rows = axis == 0 ? -1 : num_rows_;
+  int64_t new_num_cols = axis == 0 ? num_cols_ : -1;
+
+  if (axis == 0) {
+    std::vector<torch::Tensor> relabeled_result;
+
+    if (coo_) {
+      std::tie(frontiers, relabeled_result) =
+          impl::TensorRelabelCUDA({coo_->row}, {coo_->row});
+      coo_ptr =
+          std::make_shared<COO>(COO{relabeled_result[0], coo_->col, coo_->e_ids,
+                                    coo_->row_sorted, coo_->col_sorted});
+      new_num_rows = frontiers.numel();
+    } else if (csc_) {
+      if (new_num_rows > 0) {
+        csc_ptr = std::make_shared<CSC>(
+            CSC{csc_->indptr, relabeled_result[0], csc_->e_ids});
+      } else {
+        std::tie(frontiers, relabeled_result) =
+            impl::TensorRelabelCUDA({csc_->indices}, {csc_->indices});
+        csc_ptr = std::make_shared<CSC>(
+            CSC{csc_->indptr, relabeled_result[0], csc_->e_ids});
+        new_num_rows = frontiers.numel();
+      }
+    }
+  } else if (axis == 1) {
+    std::vector<torch::Tensor> relabeled_result;
+
+    if (coo_) {
+      std::tie(frontiers, relabeled_result) =
+          impl::TensorRelabelCUDA({coo_->col}, {coo_->col});
+      coo_ptr =
+          std::make_shared<COO>(COO{coo_->row, relabeled_result[0], coo_->e_ids,
+                                    coo_->row_sorted, coo_->col_sorted});
+      new_num_cols = frontiers.numel();
+    } else if (csr_) {
+      if (new_num_cols > 0) {
+        csc_ptr = std::make_shared<CSR>(
+            CSR{csr_->indptr, relabeled_result[0], csr_->e_ids});
+      } else {
+        std::tie(frontiers, relabeled_result) =
+            impl::TensorRelabelCUDA({csr_->indices}, {csr_->indices});
+        csc_ptr = std::make_shared<CSC>(
+            CSR{csr_->indptr, relabeled_result[0], csr_->e_ids});
+        new_num_cols = frontiers.numel();
+      }
+    }
+  }
+
+  auto ret = c10::intrusive_ptr<Graph>(
+      std::unique_ptr<Graph>(new Graph(new_num_rows, new_num_cols)));
+  ret->SetNumEdges(num_edges_);
+  ret->SetCOO(coo_ptr);
+  ret->SetCSC(csc_ptr);
+  ret->SetCSR(csr_ptr);
+
+  return {ret, frontiers};
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor,
+           torch::optional<torch::Tensor>>
+Graph::GraphRelabel(torch::Tensor col_seeds, torch::Tensor row_ids) {
+  CreateSparseFormat(_COO);
+  torch::Tensor coo_col = col_seeds.index({coo_->col});
+  torch::Tensor coo_row =
+      row_ids.numel() > 0 ? row_ids.index({coo_->row}) : coo_->row;
+
+  torch::Tensor frontier;
+  std::vector<torch::Tensor> relabeled_result;
+  std::tie(frontier, relabeled_result) =
+      impl::TensorRelabelCUDA({col_seeds, coo_row}, {coo_col, coo_row});
+
+  return {frontier, relabeled_result[1], relabeled_result[0], coo_->e_ids};
 }
 
 torch::Tensor Graph::GetValidNodes(torch::Tensor col_seeds,

@@ -36,13 +36,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::optional<torch::Tensor>>
 COO2CSCCUDA(torch::Tensor row, torch::Tensor col, int64_t num_cols,
             bool col_sorted);
 
-// unique & relabel
-torch::Tensor TensorUniqueCUDA(torch::Tensor node_ids);
-
-std::tuple<torch::Tensor, std::vector<torch::Tensor>> TensorRelabelCUDA(
-    const std::vector<torch::Tensor>& mapping_tensor,
-    const std::vector<torch::Tensor>& data_requiring_relabel);
-
 }  // namespace impl
 }  // namespace gs
 
