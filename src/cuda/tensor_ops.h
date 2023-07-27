@@ -33,6 +33,8 @@ std::tuple<torch::Tensor, torch::Tensor> IndexHashMapInsertCUDA(
 torch::Tensor IndexHashMapSearchCUDA(torch::Tensor key_buffer,
                                      torch::Tensor value_buffer,
                                      torch::Tensor keys);
+
+std::tuple<torch::Tensor, torch::Tensor> TensorCompact(torch::Tensor data);
 }  // namespace impl
 }  // namespace gs
 

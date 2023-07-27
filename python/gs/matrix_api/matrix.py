@@ -11,6 +11,12 @@ from ..ops import gspmm, gsddmm
 torch.fx.wrap("create_block_from_coo")
 torch.fx.wrap("create_block_from_csc")
 torch.fx.wrap("assign_block")
+torch.fx.wrap("gen_arange")
+
+
+def gen_arange(size: int, dtype: torch.dtype,
+               device: torch.device) -> torch.Tensor:
+    return torch.arange(size, dtype=dtype, device=device)
 
 
 def assign_block(block, e_ids, edata, unique_tensor):
@@ -267,3 +273,19 @@ class Matrix(object):
 
     def node2vec(self, seeds, walk_length, p, q) -> torch.Tensor:
         return self._graph._CAPI_Node2Vec(seeds, walk_length, p, q)
+
+    def rows(self) -> torch.Tensor:
+        if "_ID" in self.row_ndata:
+            return self.row_ndata["_ID"]
+        else:
+            return gen_arange(self.num_rows(),
+                              dtype=torch.int64,
+                              device='cuda')
+
+    def cols(self) -> torch.Tensor:
+        if "_ID" in self.col_ndata:
+            return self.col_ndata["_ID"]
+        else:
+            return gen_arange(self.num_cols(),
+                              dtype=torch.int64,
+                              device='cuda')
