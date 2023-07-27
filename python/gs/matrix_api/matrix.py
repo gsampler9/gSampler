@@ -11,6 +11,12 @@ from ..ops import gspmm, gsddmm
 torch.fx.wrap("create_block_from_coo")
 torch.fx.wrap("create_block_from_csc")
 torch.fx.wrap("assign_block")
+torch.fx.wrap("gen_arange")
+
+
+def gen_arange(size: int, dtype: torch.dtype,
+               device: torch.device) -> torch.Tensor:
+    return torch.arange(size, dtype=dtype, device=device)
 
 
 def assign_block(block, e_ids, edata, unique_tensor):
@@ -24,9 +30,13 @@ def assign_block(block, e_ids, edata, unique_tensor):
 
 
 class Matrix(object):
-    def __init__(
-        self, graph=None, row_ndata=None, col_ndata=None, edata=None, compact=False
-    ):
+
+    def __init__(self,
+                 graph=None,
+                 row_ndata=None,
+                 col_ndata=None,
+                 edata=None,
+                 compact=False):
         self._graph = graph
         self.null_tensor = torch.Tensor().cuda().long()
         self.row_ndata = {} if row_ndata is None else row_ndata
@@ -34,7 +44,8 @@ class Matrix(object):
         self.edata = {} if edata is None else edata
         self._compact = compact
 
-    def load_graph(self, format: str, format_tensors: List[torch.Tensor]) -> Matrix:
+    def load_graph(self, format: str,
+                   format_tensors: List[torch.Tensor]) -> Matrix:
         assert format in ["CSC", "COO", "CSR"]
         assert len(format_tensors) == 2
 
@@ -140,15 +151,16 @@ class Matrix(object):
         return self
 
     # Select-step operators
-    def individual_sampling(self, K: int, probs: torch.Tensor, replace: bool) -> Matrix:
+    def individual_sampling(self, K: int, probs: torch.Tensor,
+                            replace: bool) -> Matrix:
         ret_matrix = Matrix()
 
         if probs is None:
-            subgraph, edge_index = self._graph._CAPI_Sampling(1, K, replace, _CSC, _COO)
+            subgraph, edge_index = self._graph._CAPI_Sampling(
+                1, K, replace, _CSC, _COO)
         else:
             subgraph, edge_index = self._graph._CAPI_SamplingProbs(
-                1, probs, K, replace, _CSC, _COO
-            )
+                1, probs, K, replace, _CSC, _COO)
 
         ret_matrix._graph = subgraph
         ret_matrix.row_ndata = self.row_ndata
@@ -158,15 +170,14 @@ class Matrix(object):
 
         return ret_matrix
 
-    def collective_sampling(self, K: int, probs: torch.Tensor, replace: bool) -> Matrix:
+    def collective_sampling(self, K: int, probs: torch.Tensor,
+                            replace: bool) -> Matrix:
         if probs is None:
             selected_index = torch.ops.gs_ops._CAPI_ListSampling(
-                probs.numel(), K, replace
-            )
+                probs.numel(), K, replace)
         else:
             selected_index = torch.ops.gs_ops._CAPI_ListSamplingWithProbs(
-                probs, K, replace
-            )
+                probs, K, replace)
 
         return self[selected_index, :], selected_index
 
@@ -252,8 +263,8 @@ class Matrix(object):
     @property
     def coo(self) -> List[torch.Tensor]:
         return [
-            self._graph._CAPI_GetCOOIndptr(),
-            self._graph._CAPI_GetCOOIndices(),
+            self._graph._CAPI_GetCOORows(),
+            self._graph._CAPI_GetCOOCols(),
             self._graph._CAPI_GetCOOEids(),
         ]
 
@@ -262,3 +273,19 @@ class Matrix(object):
 
     def node2vec(self, seeds, walk_length, p, q) -> torch.Tensor:
         return self._graph._CAPI_Node2Vec(seeds, walk_length, p, q)
+
+    def rows(self) -> torch.Tensor:
+        if "_ID" in self.row_ndata:
+            return self.row_ndata["_ID"]
+        else:
+            return gen_arange(self.num_rows(),
+                              dtype=torch.int64,
+                              device='cuda')
+
+    def cols(self) -> torch.Tensor:
+        if "_ID" in self.col_ndata:
+            return self.col_ndata["_ID"]
+        else:
+            return gen_arange(self.num_cols(),
+                              dtype=torch.int64,
+                              device='cuda')
