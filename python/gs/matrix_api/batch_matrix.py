@@ -44,15 +44,19 @@ class BatchMatrix(Matrix):
         has_r = False if r_slice is None else True
         has_c = False if c_slice is None else True
 
-        if has_r and not has_c:
+        if has_r and not has_c and r_slice_ptr is not None:
             raise NotImplementedError
-        elif not has_r and has_c:
+        
+        if c_slice_ptr is None and r_slice_ptr is None:
+            matrix = super()[r_slice, c_slice]
+            return ret_matrix.load_from_matrix(matrix, self.batch_size, self.num_batch)
+        elif not has_r and has_c and c_slice_ptr is not None:
+            graph, edge_index, colid = self._graph._CAPI_BatchColSlicing(
+                c_slice, c_slice_ptr, self.encoding)
+
             # only column slicing
             if "_ID" not in self.col_ndata:
-                ret_matrix.col_ndata["_ID"] = c_slice
-
-            graph, edge_index = self._graph._CAPI_BatchColSlicing(
-                c_slice, c_slice_ptr, self.encoding)
+                ret_matrix.col_ndata["_ID"] = colid
 
             ret_matrix._graph = graph
             ret_matrix.num_batch = self.num_batch
@@ -66,7 +70,6 @@ class BatchMatrix(Matrix):
                 ret_matrix.row_ndata[key] = value
 
             return ret_matrix
-
         else:
             raise NotImplementedError
 
@@ -89,7 +92,16 @@ class BatchMatrix(Matrix):
         return ret_matrix
 
     def collective_sampling(self, K, probs, probs_ptr, replace):
-        raise NotImplementedError
+        if probs is None:
+            selected_index, _ = torch.ops.gs_ops._CAPI_BatchListSampling(
+                K, replace, probs_ptr
+            )
+        else:
+            selected_index, _ = torch.ops.gs_ops._CAPI_BatchListSamplingWithProbs(
+                probs, K, replace, probs_ptr
+            )
+
+        return self[selected_index, :], selected_index
 
     def to_dgl_block(self, prefetch_edata={}):
         col_seeds = self.col_ndata.get("_ID", self.null_tensor)
