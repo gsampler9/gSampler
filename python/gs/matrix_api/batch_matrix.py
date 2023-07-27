@@ -111,6 +111,16 @@ class BatchMatrix(Matrix):
                     ret_matrix.row_ndata[key] = value[row_ids]
 
                 return ret_matrix
+
+            else:
+                data = (None, c_slice)
+                m = super().__getitem__(data)
+                ret_bm = BatchMatrix()
+                ret_bm.load_from_matrix(m, self.encoding)
+                ret_bm._graph._CAPI_SetColBptr(c_slice_ptr)
+                ret_bm._graph._CAPI_BatchSetCols(c_slice)
+                return ret_bm
+
         else:
             raise NotImplementedError
 
@@ -160,21 +170,6 @@ class BatchMatrix(Matrix):
 
         return batch_gen_block(frontier_list, coo_row_list, coo_col_list,
                                coo_eids, coo_bptr, assign_edata, col_counts)
-        '''
-        
-
-        blocks = []
-        assign_edata = {key: self.edata[key] for key in prefetch_edata}
-        for frontier, row, col, eid, col_count in zip(frontier_list, row_list,
-                                                      col_list, eid_list,
-                                                      col_counts):
-            block = create_block_from_coo(row, col, frontier.numel(),
-                                          col_count)
-            assign_block(block, eid, assign_edata, frontier)
-            blocks.append(block)
-        
-        return blocks
-        '''
 
     def sum(self, key, axis) -> torch.Tensor:
         rhs = self.edata[key]
