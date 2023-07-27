@@ -119,7 +119,7 @@ torch::Tensor FusedNode2VecCUDA(torch::Tensor seeds, int64_t walk_length,
   _Node2VecKernel<<<nbx, ntx>>>(seeds.data_ptr<int64_t>(), num_seeds,
                                 max_num_steps, indices, indptr, out_traces_data,
                                 p, q);
-  return out_traces_tensor.reshape({-1, seeds.numel()});
+  return out_traces_tensor.reshape({seeds.numel(), -1});
 }
 
 }  // namespace fusion
