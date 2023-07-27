@@ -512,46 +512,50 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::Compact(
   int64_t new_num_cols = axis == 0 ? num_cols_ : -1;
 
   if (axis == 0) {
-    std::vector<torch::Tensor> relabeled_result;
+    torch::Tensor compact_tensor;
 
     if (coo_) {
-      std::tie(frontiers, relabeled_result) =
-          impl::TensorRelabelCUDA({coo_->row}, {coo_->row});
+      std::tie(frontiers, compact_tensor) = impl::TensorCompact(coo_->row);
       coo_ptr =
-          std::make_shared<COO>(COO{relabeled_result[0], coo_->col, coo_->e_ids,
+          std::make_shared<COO>(COO{compact_tensor, coo_->col, coo_->e_ids,
                                     coo_->row_sorted, coo_->col_sorted});
       new_num_rows = frontiers.numel();
-    } else if (csc_) {
+    }
+
+    if (csc_) {
       if (new_num_rows > 0) {
         csc_ptr = std::make_shared<CSC>(
-            CSC{csc_->indptr, relabeled_result[0], csc_->e_ids});
+            CSC{csc_->indptr, compact_tensor, csc_->e_ids});
       } else {
-        std::tie(frontiers, relabeled_result) =
-            impl::TensorRelabelCUDA({csc_->indices}, {csc_->indices});
+        std::tie(frontiers, compact_tensor) =
+            impl::TensorCompact(csc_->indices);
         csc_ptr = std::make_shared<CSC>(
-            CSC{csc_->indptr, relabeled_result[0], csc_->e_ids});
+            CSC{csc_->indptr, compact_tensor, csc_->e_ids});
         new_num_rows = frontiers.numel();
       }
     }
+
   } else if (axis == 1) {
     std::vector<torch::Tensor> relabeled_result;
+    torch::Tensor compact_tensor;
 
     if (coo_) {
-      std::tie(frontiers, relabeled_result) =
-          impl::TensorRelabelCUDA({coo_->col}, {coo_->col});
+      std::tie(frontiers, compact_tensor) = impl::TensorCompact(coo_->col);
       coo_ptr =
-          std::make_shared<COO>(COO{coo_->row, relabeled_result[0], coo_->e_ids,
+          std::make_shared<COO>(COO{coo_->row, compact_tensor, coo_->e_ids,
                                     coo_->row_sorted, coo_->col_sorted});
       new_num_cols = frontiers.numel();
-    } else if (csr_) {
+    }
+
+    if (csr_) {
       if (new_num_cols > 0) {
         csc_ptr = std::make_shared<CSR>(
-            CSR{csr_->indptr, relabeled_result[0], csr_->e_ids});
+            CSR{csr_->indptr, compact_tensor, csr_->e_ids});
       } else {
-        std::tie(frontiers, relabeled_result) =
-            impl::TensorRelabelCUDA({csr_->indices}, {csr_->indices});
+        std::tie(frontiers, compact_tensor) =
+            impl::TensorCompact(csr_->indices);
         csc_ptr = std::make_shared<CSC>(
-            CSR{csr_->indptr, relabeled_result[0], csr_->e_ids});
+            CSR{csr_->indptr, compact_tensor, csr_->e_ids});
         new_num_cols = frontiers.numel();
       }
     }

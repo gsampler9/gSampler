@@ -20,8 +20,8 @@ def pass_sampler(
     output_nodes = seeds
     for K in fanouts:
         subA = A[:, seeds]
-        u_feats = features
-        v_feats = features[seeds]
+        u_feats = features[subA.rows()]
+        v_feats = features[subA.cols()]
         att1 = gs.ops.u_mul_v(subA, u_feats @ W1, v_feats @ W1, _COO)
         att2 = gs.ops.u_mul_v(subA, u_feats @ W2, v_feats @ W2, _COO)
         att1 = torch.sum(att1, dim=1)
@@ -57,11 +57,11 @@ if __name__ == "__main__":
     m.load_graph("CSC", [csc_indptr.cuda(), csc_indices.cuda()])
     m.edata["w"] = torch.ones(m.num_edges(), dtype=torch.float32).cuda()
 
-    seeds = torch.randint(0, 10000, (64,)).cuda()
+    seeds = torch.randint(0, 10000, (64, )).cuda()
 
-    compile_func = gs.jit.compile(
-        func=pass_sampler, args=(m, seeds, [25, 10], features, W1, W2, W3)
-    )
+    compile_func = gs.jit.compile(func=pass_sampler,
+                                  args=(m, seeds, [25,
+                                                   10], features, W1, W2, W3))
     print(compile_func.gm.graph)
     for i in pass_sampler(m, seeds, [25, 10], features, W1, W2, W3):
         print(i)

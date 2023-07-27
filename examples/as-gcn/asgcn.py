@@ -10,6 +10,7 @@ def asgcn_sampler(
     A: gs.Matrix,
     seeds: torch.Tensor,
     fanouts: List,
+    features: torch.Tensor,
     W: torch.Tensor,
 ):
     output_nodes = seeds
@@ -18,8 +19,8 @@ def asgcn_sampler(
         subA = A[:, seeds]
         subA.edata["w"] = subA.edata["w"]**2
         p = subA.sum("w", axis=1).sqrt()
-        node_feats_u = subA.row_ndata["feat"]
-        node_feats_v = subA.col_ndata["feat"]
+        node_feats_u = features[subA.rows()]
+        node_feats_v = features[subA.cols()]
         h_u = node_feats_u @ W[:, 0]
         h_v = node_feats_v @ W[:, 1]
         h_v_sum = torch.sum(h_v)
@@ -50,8 +51,6 @@ if __name__ == "__main__":
     m = gs.Matrix()
     m.load_graph("CSC", [csc_indptr.cuda(), csc_indices.cuda()])
     m.edata["w"] = torch.ones(m.num_edges(), dtype=torch.float32).cuda()
-    m.row_ndata["feat"] = features
-    m.col_ndata["feat"] = features
 
     D_in = m.sum("w", axis=0)
     D_out = m.sum("w", axis=1)
@@ -60,7 +59,8 @@ if __name__ == "__main__":
     seeds = torch.randint(0, 10000, (512, )).cuda()
 
     compile_func = gs.jit.compile(func=asgcn_sampler,
-                                  args=(m, seeds, [2000, 2000], W))
+                                  args=(m, seeds, [2000, 2000], features, W))
+
     print(compile_func.gm.graph)
-    for i in compile_func(m, seeds, [2000, 2000], W):
+    for i in compile_func(m, seeds, [2000, 2000], features, W):
         print(i)
