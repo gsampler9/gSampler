@@ -9,7 +9,7 @@ def ladies_sampler(A: gs.Matrix, seeds: torch.Tensor, fanouts: List):
     ret = []
     for K in fanouts:
         subA = A[:, seeds]
-        subA.edata["p"] = subA.edata["w"] ** 2
+        subA.edata["p"] = subA.edata["w"]**2
         prob = subA.sum("p", axis=1)
         sampleA, select_index = subA.collective_sampling(K, prob, False)
         sampleA = sampleA.div("w", prob[select_index], axis=1)
@@ -19,6 +19,25 @@ def ladies_sampler(A: gs.Matrix, seeds: torch.Tensor, fanouts: List):
         ret.append(sampleA.to_dgl_block(prefetch_edata={"w"}))
     output_node = seeds
     return input_node, output_node, ret
+
+
+def batch_ladise_sampler(A: gs.BatchMatrix, seeds: torch.Tensor,
+                         seeds_ptr: torch.Tensor, fanouts: List):
+    ret = []
+    for K in fanouts:
+        subA = A[:, seeds::seeds_ptr]
+        subA.edata["p"] = subA.edata["w"]**2
+        prob = subA.sum("p", axis=1)
+        neighbors, probs_ptr = subA.all_rows()
+        sampleA, select_index = subA.collective_sampling(
+            K, prob, probs_ptr, False)
+        sampleA = sampleA.div("w", prob[select_index], axis=1)
+        out = sampleA.sum("w", axis=0)
+        sampleA = sampleA.div("w", out, axis=0)
+        seeds, seeds_ptr = sampleA.all_nodes()
+        ret.append(sampleA.to_dgl_block())
+
+    return ret
 
 
 if __name__ == "__main__":
@@ -35,9 +54,19 @@ if __name__ == "__main__":
     D_out = m.sum("w", axis=1)
     P = m.div("w", D_out.sqrt(), axis=1).div("w", D_in.sqrt(), axis=0)
 
-    seeds = torch.randint(0, 10000, (500,)).cuda()
+    seeds = torch.randint(0, 10000, (500, )).cuda()
 
-    compile_func = gs.jit.compile(func=ladies_sampler, args=(m, seeds, [2000, 2000]))
+    compile_func = gs.jit.compile(func=ladies_sampler,
+                                  args=(m, seeds, [2000, 2000]))
     print(compile_func.gm.graph)
     for i in compile_func(m, seeds, [2000, 2000]):
+        print(i)
+    print()
+
+    # batch
+    bm = gs.BatchMatrix()
+    bm.load_from_matrix(m)
+    seeds = torch.randint(0, 10000, (500, )).cuda()
+    seeds_ptr = torch.tensor([0, 200, 500]).cuda()
+    for i in batch_ladise_sampler(bm, seeds, seeds_ptr, [2000, 2000]):
         print(i)

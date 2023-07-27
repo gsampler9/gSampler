@@ -25,7 +25,8 @@ def assign_block(block, e_ids, edata, unique_tensor):
 
     for key, value in edata.items():
         block.edata[key] = value
-        block.srcdata["_ID"] = unique_tensor
+
+    block.srcdata["_ID"] = unique_tensor
     return block
 
 

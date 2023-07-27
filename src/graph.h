@@ -126,8 +126,22 @@ class Graph : public torch::CustomClassHolder {
   // batch api
   void SetEdgeBptr(torch::Tensor bptr) { edge_bptr_ = bptr; }
   void SetColBptr(torch::Tensor bptr) { col_bptr_ = bptr; }
+  void SetRowBptr(torch::Tensor bptr) { row_bptr_ = bptr; }
+  void SetOrigRowIds(torch::Tensor orig_row_ids) {
+    orig_row_ids_ = orig_row_ids;
+  }
+  void SetOrigColIds(torch::Tensor orig_col_ids) {
+    orig_col_ids_ = orig_col_ids;
+  }
   torch::Tensor GetEdgeBptr() { return edge_bptr_; }
   torch::Tensor GetColBptr() { return col_bptr_; }
+  torch::Tensor GetRowBptr() { return row_bptr_; }
+  std::tuple<torch::Tensor, torch::Tensor> BatchGetRows() {
+    return {orig_row_ids_, row_bptr_};
+  };
+  std::tuple<torch::Tensor, torch::Tensor> BatchGetCols() {
+    return {orig_col_ids_, col_bptr_};
+  };
 
   std::tuple<torch::Tensor, torch::Tensor> BatchGetCSCIndptr() {
     CreateSparseFormat(_CSC);
@@ -172,7 +186,10 @@ class Graph : public torch::CustomClassHolder {
   };
 
   std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchColSlicing(
-      torch::Tensor seeds, torch::Tensor batch_ptr, bool encoding);
+      torch::Tensor seeds, torch::Tensor batch_ptr);
+
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchRowSlicing(
+      torch::Tensor row_ids, torch::Tensor row_bptr);
 
   std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchRowSampling(
       int64_t fanout, bool replace);
@@ -180,8 +197,8 @@ class Graph : public torch::CustomClassHolder {
   std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchRowSamplingProbs(
       int64_t fanout, bool replace, torch::Tensor edge_probs);
 
-  std::tuple<std::vector<torch::Tensor>, std::vector<torch::Tensor>,
-             std::vector<torch::Tensor>, std::vector<torch::Tensor>>
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor,
+             torch::optional<torch::Tensor>, torch::Tensor>
   BatchGraphRelabel(torch::Tensor col_seeds, torch::Tensor row_ids);
 
   std::tuple<torch::Tensor, torch::Tensor> BatchGetValidNodes(
@@ -196,7 +213,10 @@ class Graph : public torch::CustomClassHolder {
   std::shared_ptr<COO> coo_;
 
   // batch attr
-  torch::Tensor col_bptr_, edge_bptr_;
+  torch::Tensor col_bptr_, row_bptr_, edge_bptr_;
+  int64_t row_encoding_size_;
+  torch::Tensor orig_row_ids_;
+  torch::Tensor orig_col_ids_;
 };
 
 }  // namespace gs
