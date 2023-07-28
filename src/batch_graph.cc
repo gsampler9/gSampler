@@ -27,10 +27,11 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
   torch::optional<torch::Tensor> e_ids = torch::nullopt;
   int64_t num_batch = col_bptr.numel() - 1;
 
-  int64_t row_encoding_size_ = GetNumRows();
+  int64_t row_encoding_size = GetNumRows();
 
   torch::Tensor orig_row_ids;
   torch::Tensor row_bptr;
+  torch::Tensor unique_encoding_rows;
 
   if (on_format == _CSC) {
     CHECK(output_format != _CSR)
@@ -40,16 +41,18 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
     e_ids = csc->e_ids;
 
     std::tie(tmp_ptr, select_index, edge_bptr_) = BatchOnIndptrSlicing(
-        csc, seeds, col_bptr, with_coo, encoding, row_encoding_size_);
+        csc, seeds, col_bptr, with_coo, encoding, row_encoding_size);
 
     if (encoding) {
-      torch::Tensor unique_encoding_rows, new_indices;
-      std::tie(unique_encoding_rows, new_indices) =
-          impl::TensorCompact(tmp_ptr->coo_in_indices);
-      tmp_ptr->coo_in_indices = new_indices;
+      // torch::Tensor unique_encoding_rows, new_indices;
+      // std::tie(unique_encoding_rows, new_indices) =
+      //     impl::TensorCompact(tmp_ptr->coo_in_indices);
+      // tmp_ptr->coo_in_indices = new_indices;
+      unique_encoding_rows =
+          std::get<0>(torch::_unique2(tmp_ptr->coo_in_indices));
 
       std::tie(row_bptr, orig_row_ids) = impl::batch::GetBatchOffsets(
-          unique_encoding_rows, num_batch, row_encoding_size_);
+          unique_encoding_rows, num_batch, row_encoding_size);
     }
 
     if (output_format & _CSC)
@@ -66,7 +69,7 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
   }
 
   int64_t new_num_cols = seeds.numel();
-  int64_t new_num_rows = orig_row_ids.numel();
+  int64_t new_num_rows = num_rows_ * num_batch;
 
   auto ret = c10::intrusive_ptr<Graph>(
       std::unique_ptr<Graph>(new Graph(new_num_rows, new_num_cols)));
@@ -78,8 +81,13 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
   ret->SetColBptr(col_bptr);
   ret->SetRowBptr(row_bptr);
   ret->SetOrigColIds(seeds);
-  ret->SetOrigRowIds(orig_row_ids);
   ret->SetEdgeBptr(csc_->indptr.index({col_bptr}));
+
+  if (encoding) {
+    ret->SetOrigRowIds(unique_encoding_rows);
+    ret->row_encoding_size_ = row_encoding_size;
+  }
+  // ret->unique_encoding_rows_ = unique_encoding_rows;
 
   torch::Tensor split_index;
   if (e_ids.has_value()) {
@@ -99,8 +107,10 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchRowSlicing(
   graph_ptr->SetColBptr(col_bptr_);
   graph_ptr->SetRowBptr(row_bptr);
   graph_ptr->SetOrigColIds(orig_col_ids_);
-  graph_ptr->SetOrigRowIds(orig_row_ids_.index({row_ids}));
+  graph_ptr->SetOrigRowIds(row_ids);
+  // graph_ptr->unique_encoding_rows_ = encoding_row_ids;
   graph_ptr->SetEdgeBptr(graph_ptr->csc_->indptr.index({col_bptr_}));
+  graph_ptr->row_encoding_size_ = row_encoding_size_;
   return {graph_ptr, split_index};
 }
 
@@ -114,6 +124,8 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchRowSampling(
   graph_ptr->SetOrigColIds(orig_col_ids_);
   graph_ptr->SetOrigRowIds(orig_row_ids_);
   graph_ptr->SetEdgeBptr(graph_ptr->csc_->indptr.index({col_bptr_}));
+  // graph_ptr->unique_encoding_rows_ = unique_encoding_rows_;
+  graph_ptr->row_encoding_size_ = row_encoding_size_;
   return {graph_ptr, split_index};
 }
 
@@ -128,6 +140,8 @@ Graph::BatchRowSamplingProbs(int64_t fanout, bool replace,
   graph_ptr->SetOrigColIds(orig_col_ids_);
   graph_ptr->SetOrigRowIds(orig_row_ids_);
   graph_ptr->SetEdgeBptr(graph_ptr->csc_->indptr.index({col_bptr_}));
+  // graph_ptr->unique_encoding_rows_ = unique_encoding_rows_;
+  graph_ptr->row_encoding_size_ = row_encoding_size_;
   return {graph_ptr, split_index};
 }
 
@@ -145,8 +159,14 @@ Graph::BatchGraphRelabel(torch::Tensor col_seeds, torch::Tensor row_ids) {
         << "Relabel BatchGraph on COO must require COO to be column-sorted";
 
   torch::Tensor coo_col = col_seeds.index({coo->col});
-  torch::Tensor coo_row =
-      row_ids.numel() > 0 ? row_ids.index({coo->row}) : coo->row;
+  // torch::Tensor coo_row =
+  //    row_ids.numel() > 0 ? row_ids.index({coo->row}) : coo->row;
+
+  torch::Tensor coo_row;
+  torch::Tensor tmp;
+  std::tie(tmp, coo_row) =
+      impl::batch::GetBatchOffsets(orig_row_ids_.index({coo->row}),
+                                   edge_bptr_.numel() - 1, row_encoding_size_);
 
   torch::Tensor unique_tensor, unique_tensor_bptr;
   torch::Tensor out_coo_row, out_coo_col, out_coo_bptr;
@@ -171,9 +191,15 @@ std::tuple<torch::Tensor, torch::Tensor> Graph::BatchGetValidNodes(
     LOG(FATAL)
         << "Relabel BatchGraph on COO must require COO to be column-sorted";
 
-  torch::Tensor coo_col = coo->col;
-  torch::Tensor coo_row =
-      row_ids.numel() > 0 ? row_ids.index({coo->row}) : coo->row;
+  torch::Tensor coo_col = col_seeds.index({coo->col});
+  // torch::Tensor coo_row =
+  //    row_ids.numel() > 0 ? row_ids.index({coo->row}) : coo->row;
+
+  torch::Tensor coo_row;
+  torch::Tensor tmp;
+  std::tie(tmp, coo_row) =
+      impl::batch::GetBatchOffsets(orig_row_ids_.index({coo->row}),
+                                   edge_bptr_.numel() - 1, row_encoding_size_);
 
   torch::Tensor unique_tensor, unique_tensor_bptr;
   torch::Tensor out_coo_row, out_coo_col, out_coo_bptr;

@@ -217,6 +217,7 @@ class Graph : public torch::CustomClassHolder {
   int64_t row_encoding_size_;
   torch::Tensor orig_row_ids_;
   torch::Tensor orig_col_ids_;
+  torch::Tensor unique_encoding_rows_;
 };
 
 }  // namespace gs

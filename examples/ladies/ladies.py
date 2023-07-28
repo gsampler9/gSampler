@@ -23,20 +23,23 @@ def ladies_sampler(A: gs.Matrix, seeds: torch.Tensor, fanouts: List):
 
 def batch_ladise_sampler(A: gs.BatchMatrix, seeds: torch.Tensor,
                          seeds_ptr: torch.Tensor, fanouts: List):
+    torch.cuda.nvtx.range_push("ladies sampler")
     ret = []
     for K in fanouts:
         subA = A[:, seeds::seeds_ptr]
         subA.edata["p"] = subA.edata["w"]**2
-        prob = subA.sum("p", axis=1)
-        neighbors, probs_ptr = subA.all_rows()
+        probs = subA.sum("p", axis=1)
+        neighbors, neighbors_ptr = subA.all_rows()
+        neighbors_probs = probs[neighbors]
+
         sampleA, select_index = subA.collective_sampling(
-            K, prob, probs_ptr, False)
-        sampleA = sampleA.div("w", prob[select_index], axis=1)
+            K, neighbors_probs, neighbors_ptr, neighbors, False)
+
+        sampleA = sampleA.div("w", probs[select_index], axis=1)
         out = sampleA.sum("w", axis=0)
         sampleA = sampleA.div("w", out, axis=0)
         seeds, seeds_ptr = sampleA.all_nodes()
         ret.append(sampleA.to_dgl_block())
-
     return ret
 
 
@@ -67,6 +70,6 @@ if __name__ == "__main__":
     bm = gs.BatchMatrix()
     bm.load_from_matrix(m)
     seeds = torch.randint(0, 10000, (500, )).cuda()
-    seeds_ptr = torch.tensor([0, 200, 500]).cuda()
+    seeds_ptr = torch.tensor([0, 250, 500]).cuda()
     for i in batch_ladise_sampler(bm, seeds, seeds_ptr, [2000, 2000]):
         print(i)

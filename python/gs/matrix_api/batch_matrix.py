@@ -93,13 +93,6 @@ class BatchMatrix(Matrix):
                 else:
                     raise NotImplementedError
 
-                row_ids = None
-                if "_ID" not in self.row_ndata:
-                    row_ids, row_bptr = graph._CAPI_BatchGetRows()
-                    ret_matrix.row_ndata["_ID"] = row_ids
-                else:
-                    raise NotImplementedError
-
                 ret_matrix._graph = graph
                 for key, value in self.edata.items():
                     ret_matrix.edata[key] = value[edge_index]
@@ -108,7 +101,7 @@ class BatchMatrix(Matrix):
                     ret_matrix.col_ndata[key] = value[c_slice]
 
                 for key, value in self.row_ndata.items():
-                    ret_matrix.row_ndata[key] = value[row_ids]
+                    ret_matrix.row_ndata[key] = value
 
                 return ret_matrix
 
@@ -142,12 +135,17 @@ class BatchMatrix(Matrix):
 
         return ret_matrix
 
-    def collective_sampling(self, K, probs, probs_ptr, replace):
+    def collective_sampling(self, K, probs, probs_ptr, neighbors, replace):
         if probs is None:
             raise NotImplementedError
         else:
             selected_index, index_ptr = torch.ops.gs_ops._CAPI_BatchListSamplingWithProbs(
                 probs, K, replace, probs_ptr)
+
+            if neighbors is not None:
+                selected_index = neighbors[selected_index]
+
+            print(selected_index)
 
             return self[selected_index::index_ptr, :], selected_index
 
