@@ -155,7 +155,7 @@ def generate_new_args(args, graph_args, inner_graph_data_args, static_args,
 
 class compile:
 
-    def __init__(self, func, args, try_compact=True):
+    def __init__(self, func, args, try_compact=True, format_select=True):
         """
         This is auto wrapper for user's func.
         We will create an func inner_wrapper according user's func and its args.
@@ -182,6 +182,7 @@ class compile:
         self.graph_actions = graph_actions
         self.static_actions = static_actions
         self._try_compact = try_compact
+        self._format_select = format_select
         self.func = func
         self.iter = 10
 
@@ -190,14 +191,19 @@ class compile:
 
         if self._try_compact:
             compact_gm = self.generate_gm(args, True)
-            compact_gm = self.format_selection_gm(compact_gm, args)
+            if self._format_select:
+                compact_gm = self.format_selection_gm(compact_gm, args)
+
             non_compcat_gm = self.generate_gm(args, False)
-            non_compcat_gm = self.format_selection_gm(non_compcat_gm, args)
+            if self._format_select:
+                non_compcat_gm = self.format_selection_gm(non_compcat_gm, args)
+
             self.gm = self.compact_bench(compact_gm, non_compcat_gm, args)
 
         else:
             self.gm = self.generate_gm(args, False)
-            self.gm = self.format_selection_gm(self.gm, args)
+            if self._format_select:
+                self.gm = self.format_selection_gm(self.gm, args)
 
     def __call__(self, *args):
         # generate graph_actions via graph_actions
