@@ -13,7 +13,13 @@ torch.fx.wrap("create_block_from_coo")
 torch.fx.wrap("create_block_from_csc")
 torch.fx.wrap("assign_block")
 torch.fx.wrap("gen_arange")
-torch.fx.wrap("gather_pinned_tensor_rows")
+torch.fx.wrap("data_index")
+
+def data_index(data, index):
+    if data.is_pinned():
+        return gather_pinned_tensor_rows(data, index)
+    else:
+        return data[index]
 
 
 def gen_arange(size: int, dtype: torch.dtype,
@@ -112,10 +118,7 @@ class Matrix(object):
 
         ret_matrix._graph = graph
         for key, value in self.edata.items():
-            if value.is_pinned():
-                ret_matrix.edata[key] = gather_pinned_tensor_rows(value, edge_index)
-            else:
-                ret_matrix.edata[key] = value[edge_index]
+            ret_matrix.edata[key] = data_index(value, edge_index)
 
         for key, value in self.col_ndata.items():
             if col_index_tag:
