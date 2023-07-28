@@ -90,7 +90,9 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
 
   torch::Tensor split_index;
   if (e_ids.has_value()) {
-    split_index = e_ids.value().index_select(0, select_index);
+    split_index = (e_ids.value().is_pinned())
+                      ? impl::IndexSelectCPUFromGPU(e_ids.value(), select_index)
+                      : e_ids.value().index_select(0, select_index);
   } else {
     split_index = select_index;
   }

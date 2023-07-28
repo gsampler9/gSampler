@@ -3,8 +3,10 @@ from ..utils import create_block_from_coo
 from ..format import _COO, _CSC, _CSR
 from ..ops import gspmm, gsddmm
 from .matrix import Matrix
+from dgl.utils import gather_pinned_tensor_rows
 
 torch.fx.wrap("batch_gen_block")
+torch.fx.wrap("gather_pinned_tensor_rows")
 
 
 def batch_gen_block(frontier_list, coo_row_list, coo_col_list, coo_eids,
@@ -76,7 +78,10 @@ class BatchMatrix(Matrix):
                 raise NotImplementedError
 
             for key, value in self.edata.items():
-                ret_matrix.edata[key] = value[edge_index]
+                if value.is_pinned():
+                    ret_matrix.edata[key] = gather_pinned_tensor_rows(value, edge_index)
+                else:
+                    ret_matrix.edata[key] = value[edge_index]
 
             for key, value in self.row_ndata.items():
                 ret_matrix.row_ndata[key] = value[r_slice]
@@ -101,7 +106,10 @@ class BatchMatrix(Matrix):
 
                 ret_matrix._graph = graph
                 for key, value in self.edata.items():
-                    ret_matrix.edata[key] = value[edge_index]
+                    if value.is_pinned():
+                        ret_matrix.edata[key] = gather_pinned_tensor_rows(value, edge_index)
+                    else:
+                        ret_matrix.edata[key] = value[edge_index]
 
                 for key, value in self.col_ndata.items():
                     ret_matrix.col_ndata[key] = value[c_slice]

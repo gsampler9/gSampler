@@ -2,6 +2,7 @@ from __future__ import annotations
 import torch
 from torch.fx import Proxy
 from dgl.heterograph import DGLBlock
+from dgl.utils import gather_pinned_tensor_rows
 from typing import Optional, List
 
 from ..utils import create_block_from_coo, create_block_from_csc
@@ -12,6 +13,7 @@ torch.fx.wrap("create_block_from_coo")
 torch.fx.wrap("create_block_from_csc")
 torch.fx.wrap("assign_block")
 torch.fx.wrap("gen_arange")
+torch.fx.wrap("gather_pinned_tensor_rows")
 
 
 def gen_arange(size: int, dtype: torch.dtype,
@@ -60,13 +62,13 @@ class Matrix(object):
         elif format == "CSC":
             indptr, indices = format_tensors
             num_rows = indices.max() + 1
-            num_cols = indptr.numel()
+            num_cols = indptr.numel() - 1
             self._graph = torch.classes.gs_classes.Graph(num_rows, num_cols)
             self._graph._CAPI_LoadCSC(indptr, indices)
 
         elif format == "CSR":
             indptr, indices = format_tensors
-            num_rows = indptr.numel()
+            num_rows = indptr.numel() - 1
             num_cols = indices.max() + 1
             self._graph = torch.classes.gs_classes.Graph(num_rows, num_cols)
             self._graph._CAPI_LoadCSR(indptr, indices)
@@ -110,7 +112,10 @@ class Matrix(object):
 
         ret_matrix._graph = graph
         for key, value in self.edata.items():
-            ret_matrix.edata[key] = value[_edge_index]
+            if value.is_pinned():
+                ret_matrix.edata[key] = gather_pinned_tensor_rows(value, edge_index)
+            else:
+                ret_matrix.edata[key] = value[edge_index]
 
         for key, value in self.col_ndata.items():
             if col_index_tag:
