@@ -11,8 +11,7 @@
 namespace gs {
 // batch api
 std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
-    torch::Tensor seeds, torch::Tensor col_bptr) {
-  bool encoding = true;
+    torch::Tensor seeds, torch::Tensor col_bptr, bool encoding) {
   int64_t axis = 1;
   int64_t on_format = _CSC;
   int64_t output_format = _CSC + _COO;
@@ -164,9 +163,12 @@ Graph::BatchGraphRelabel(torch::Tensor col_seeds, torch::Tensor row_ids) {
 
   torch::Tensor coo_row;
   torch::Tensor tmp;
-  std::tie(tmp, coo_row) =
-      impl::batch::GetBatchOffsets(orig_row_ids_.index({coo->row}),
-                                   edge_bptr_.numel() - 1, row_encoding_size_);
+  if (row_ids.numel() > 0) {
+    std::tie(tmp, coo_row) = impl::batch::GetBatchOffsets(
+        row_ids.index({coo->row}), edge_bptr_.numel() - 1, row_encoding_size_);
+  } else {
+    coo_row = coo->row;
+  }
 
   torch::Tensor unique_tensor, unique_tensor_bptr;
   torch::Tensor out_coo_row, out_coo_col, out_coo_bptr;
@@ -197,9 +199,12 @@ std::tuple<torch::Tensor, torch::Tensor> Graph::BatchGetValidNodes(
 
   torch::Tensor coo_row;
   torch::Tensor tmp;
-  std::tie(tmp, coo_row) =
-      impl::batch::GetBatchOffsets(orig_row_ids_.index({coo->row}),
-                                   edge_bptr_.numel() - 1, row_encoding_size_);
+  if (row_ids.numel() > 0) {
+    std::tie(tmp, coo_row) = impl::batch::GetBatchOffsets(
+        row_ids.index({coo->row}), edge_bptr_.numel() - 1, row_encoding_size_);
+  } else {
+    coo_row = coo->row;
+  };
 
   torch::Tensor unique_tensor, unique_tensor_bptr;
   torch::Tensor out_coo_row, out_coo_col, out_coo_bptr;

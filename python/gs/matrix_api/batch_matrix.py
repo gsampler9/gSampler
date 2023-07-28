@@ -69,6 +69,12 @@ class BatchMatrix(Matrix):
                 r_slice, r_slice_ptr)
 
             ret_matrix._graph = graph
+            # only column slicing
+            if "_ID" not in self.row_ndata:
+                ret_matrix.row_ndata["_ID"] = r_slice
+            else:
+                raise NotImplementedError
+
             for key, value in self.edata.items():
                 ret_matrix.edata[key] = value[edge_index]
 
@@ -85,7 +91,7 @@ class BatchMatrix(Matrix):
 
             if self.encoding:
                 graph, edge_index = self._graph._CAPI_BatchColSlicing(
-                    c_slice, c_slice_ptr)
+                    c_slice, c_slice_ptr, self.encoding)
 
                 # only column slicing
                 if "_ID" not in self.col_ndata:
@@ -144,8 +150,6 @@ class BatchMatrix(Matrix):
 
             if neighbors is not None:
                 selected_index = neighbors[selected_index]
-
-            print(selected_index)
 
             return self[selected_index::index_ptr, :], selected_index
 

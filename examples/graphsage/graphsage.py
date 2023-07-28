@@ -37,7 +37,7 @@ if __name__ == "__main__":
     m.load_graph("CSC", [csc_indptr.cuda(), csc_indices.cuda()])
 
     seeds = torch.randint(0, 10000, (1024, )).cuda()
-    seeds_ptr = torch.tensor([0, 512, 1024]).long().cuda()
+    seeds_ptr = torch.tensor([0, 1024]).long().cuda()
 
     compile_func = gs.jit.compile(func=graphsage_sampler,
                                   args=(m, seeds, [25, 10]))

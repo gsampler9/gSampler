@@ -58,6 +58,7 @@ if __name__ == "__main__":
     P = m.div("w", D_out.sqrt(), axis=1).div("w", D_in.sqrt(), axis=0)
 
     seeds = torch.randint(0, 10000, (500, )).cuda()
+    seeds_ptr = torch.tensor([0, 500]).cuda()
 
     compile_func = gs.jit.compile(func=ladies_sampler,
                                   args=(m, seeds, [2000, 2000]))
@@ -69,7 +70,5 @@ if __name__ == "__main__":
     # batch
     bm = gs.BatchMatrix()
     bm.load_from_matrix(m)
-    seeds = torch.randint(0, 10000, (500, )).cuda()
-    seeds_ptr = torch.tensor([0, 250, 500]).cuda()
     for i in batch_ladise_sampler(bm, seeds, seeds_ptr, [2000, 2000]):
         print(i)
