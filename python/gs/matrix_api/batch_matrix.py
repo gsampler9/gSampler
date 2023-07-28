@@ -68,8 +68,30 @@ class BatchMatrix(Matrix):
         if (r_slice is not None
                 and r_slice_ptr is not None) and (c_slice is not None
                                                   and c_slice_ptr is not None):
+            graph, edge_index = self._graph._CAPI_BatchColRowSlcing(
+                c_slice, c_slice_ptr, r_slice, r_slice_ptr)
 
-            
+            ret_matrix._graph = graph
+            if "_ID" not in self.row_ndata:
+                ret_matrix.row_ndata["_ID"] = r_slice
+            else:
+                raise NotImplementedError
+
+            if "_ID" not in self.col_ndata:
+                ret_matrix.col_ndata["_ID"] = c_slice
+            else:
+                raise NotImplementedError
+
+            for key, value in self.edata.items():
+                ret_matrix.edata[key] = data_index(value, edge_index)
+
+            for key, value in self.row_ndata.items():
+                ret_matrix.row_ndata[key] = value[r_slice]
+
+            for key, value in self.col_ndata.items():
+                ret_matrix.col_ndata[key] = value[c_slice]
+
+            return ret_matrix
 
         elif (r_slice is not None and r_slice_ptr
               is not None) and (c_slice is None and c_slice_ptr is None):

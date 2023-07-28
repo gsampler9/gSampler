@@ -100,6 +100,21 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
   return {ret, split_index};
 }
 
+std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColRowSlcing(
+    torch::Tensor col, torch::Tensor col_bptr, torch::Tensor row,
+    torch::Tensor row_bptr) {
+  auto ret = BatchColSlicing(col, col_bptr, true);
+  auto graph_ptr = std::get<0>(ret);
+  auto edge_index = std::get<1>(ret);
+  auto encode_row = impl::batch::BatchEncodeCUDA(row, row_bptr,
+                                                 graph_ptr->row_encoding_size_);
+  auto ret2 = graph_ptr->BatchRowSlicing(encode_row, row_bptr);
+  auto graph_ptr2 = std::get<0>(ret2);
+  auto edge_index2 = std::get<1>(ret2);
+  auto ret_edge_index = edge_index.index({edge_index2});
+  return {graph_ptr2, ret_edge_index};
+}
+
 std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchRowSlicing(
     torch::Tensor row_ids, torch::Tensor row_bptr) {
   auto ret = Slicing(row_ids, 0, _CSC, _CSC + _COO);

@@ -40,6 +40,7 @@ TORCH_LIBRARY(gs_classes, m) {
       .def("_CAPI_FusedEDivUSum", &Graph::FusedEDivUSum)
       .def("_CAPI_BatchColSlicing", &Graph::BatchColSlicing)
       .def("_CAPI_BatchRowSlicing", &Graph::BatchRowSlicing)
+      .def("_CAPI_BatchColRowSlcing", &Graph::BatchColRowSlcing)
       .def("_CAPI_BatchRowSampling", &Graph::BatchRowSampling)
       .def("_CAPI_BatchRowSamplingProbs", &Graph::BatchRowSamplingProbs)
       .def("_CAPI_BatchGraphRelabel", &Graph::BatchGraphRelabel)

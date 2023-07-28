@@ -188,6 +188,10 @@ class Graph : public torch::CustomClassHolder {
   std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchColSlicing(
       torch::Tensor seeds, torch::Tensor col_bptr, bool encoding);
 
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchColRowSlcing(
+      torch::Tensor col, torch::Tensor col_bptr, torch::Tensor row,
+      torch::Tensor row_bptr);
+
   std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> BatchRowSlicing(
       torch::Tensor row_ids, torch::Tensor row_bptr);
 
