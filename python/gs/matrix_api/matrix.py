@@ -15,6 +15,7 @@ torch.fx.wrap("assign_block")
 torch.fx.wrap("gen_arange")
 torch.fx.wrap("data_index")
 
+
 def data_index(data, index):
     if data.is_pinned():
         return gather_pinned_tensor_rows(data, index)
@@ -112,6 +113,8 @@ class Matrix(object):
             graph, _edge_index = graph._CAPI_Slicing(r_slice, 0, _CSR, _COO)
             if edge_index is not None:
                 edge_index = edge_index[_edge_index]
+            else:
+                edge_index = _edge_index
 
             row_index_tag = True
             row_index = r_slice

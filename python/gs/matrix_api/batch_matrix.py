@@ -2,7 +2,7 @@ import torch
 from ..utils import create_block_from_coo
 from ..format import _COO, _CSC, _CSR
 from ..ops import gspmm, gsddmm
-from .matrix import Matrix
+from .matrix import Matrix, data_index
 from dgl.utils import gather_pinned_tensor_rows
 
 torch.fx.wrap("batch_gen_block")
@@ -65,8 +65,14 @@ class BatchMatrix(Matrix):
 
         ret_matrix = BatchMatrix()
 
-        if (r_slice is not None and r_slice_ptr
-                is not None) and (c_slice is None and c_slice_ptr is None):
+        if (r_slice is not None
+                and r_slice_ptr is not None) and (c_slice is not None
+                                                  and c_slice_ptr is not None):
+
+            
+
+        elif (r_slice is not None and r_slice_ptr
+              is not None) and (c_slice is None and c_slice_ptr is None):
             graph, edge_index = self._graph._CAPI_BatchRowSlicing(
                 r_slice, r_slice_ptr)
 
@@ -78,10 +84,7 @@ class BatchMatrix(Matrix):
                 raise NotImplementedError
 
             for key, value in self.edata.items():
-                if value.is_pinned():
-                    ret_matrix.edata[key] = gather_pinned_tensor_rows(value, edge_index)
-                else:
-                    ret_matrix.edata[key] = value[edge_index]
+                ret_matrix.edata[key] = data_index(value, edge_index)
 
             for key, value in self.row_ndata.items():
                 ret_matrix.row_ndata[key] = value[r_slice]
@@ -106,10 +109,7 @@ class BatchMatrix(Matrix):
 
                 ret_matrix._graph = graph
                 for key, value in self.edata.items():
-                    if value.is_pinned():
-                        ret_matrix.edata[key] = gather_pinned_tensor_rows(value, edge_index)
-                    else:
-                        ret_matrix.edata[key] = value[edge_index]
+                    ret_matrix.edata[key] = data_index(value, edge_index)
 
                 for key, value in self.col_ndata.items():
                     ret_matrix.col_ndata[key] = value[c_slice]
