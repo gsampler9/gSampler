@@ -197,9 +197,9 @@ class Matrix(object):
     def sum(self, key, axis, on_format=_CSC) -> torch.Tensor:
         rhs = self.edata[key]
         if axis == 0:
-            return gspmm(self, "copy_rhs", "sum", None, rhs, 0, _COO)
+            return gspmm(self, "copy_rhs", "sum", None, rhs, 0, _CSC)
         elif axis == 1:
-            return gspmm(self, "copy_rhs", "sum", None, rhs, 2, _COO)
+            return gspmm(self, "copy_rhs", "sum", None, rhs, 2, _CSR)
         else:
             raise "axis should be 0 or 1"
 

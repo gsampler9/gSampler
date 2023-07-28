@@ -361,41 +361,6 @@ class compile:
 
         #print(self._bench_gm(gm, args))
 
-        # clean _COO format
-        for key in candidate_graphs_formats:
-            candidate_graphs_formats[key] = set()
-
-        for node in gm.graph.nodes:
-            if node.target in format_candidate_ops:
-                on_format_index = format_candidate_ops[node.target][0]
-                candidate_graphs_formats[node.args[0]].add(
-                    node.args[on_format_index])
-
-        #print(candidate_graphs_formats)
-
-        for node in gm.graph.nodes:
-            if node.target in format_candidate_ops:
-                if len(node.users) == 0:
-                    continue
-
-                out_format_index = format_candidate_ops[node.target][1]
-
-                if out_format_index is None:
-                    continue
-
-                remove_coo = True
-                for user in node.users:
-                    if user in candidate_graphs_formats:
-                        if _COO in candidate_graphs_formats[user]:
-                            remove_coo = False
-                            break
-
-                if remove_coo:
-                    origin_out_format = node.args[out_format_index]
-                    node.update_arg(out_format_index, origin_out_format & 0)
-
-        # print(self._bench_gm(gm, args))
-
         return gm
 
     def generate_gm(self, args, try_compat):
