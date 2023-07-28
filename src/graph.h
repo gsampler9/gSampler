@@ -201,6 +201,10 @@ class Graph : public torch::CustomClassHolder {
              torch::optional<torch::Tensor>, torch::Tensor>
   BatchGraphRelabel(torch::Tensor col_seeds, torch::Tensor row_ids);
 
+  std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor>
+  BatchFusedSlicingSampling(torch::Tensor seeds, torch::Tensor col_bptr,
+                            int64_t fanout, bool replace);
+
   std::tuple<torch::Tensor, torch::Tensor> BatchGetValidNodes(
       torch::Tensor col_seeds, torch::Tensor row_ids);
 

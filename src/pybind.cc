@@ -43,6 +43,7 @@ TORCH_LIBRARY(gs_classes, m) {
       .def("_CAPI_BatchRowSampling", &Graph::BatchRowSampling)
       .def("_CAPI_BatchRowSamplingProbs", &Graph::BatchRowSamplingProbs)
       .def("_CAPI_BatchGraphRelabel", &Graph::BatchGraphRelabel)
+      .def("_CAPI_BatchFusedSlicingSampling", &Graph::BatchFusedSlicingSampling)
       .def("_CAPI_GetEdgeBptr", &Graph::GetEdgeBptr)
       .def("_CAPI_GetColBptr", &Graph::GetColBptr)
       .def("_CAPI_GetRowBptr", &Graph::GetRowBptr)

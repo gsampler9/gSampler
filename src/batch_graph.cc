@@ -78,11 +78,11 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
   ret->SetCSC(csc_ptr);
   ret->SetCSR(csr_ptr);
   ret->SetColBptr(col_bptr);
-  ret->SetRowBptr(row_bptr);
   ret->SetOrigColIds(seeds);
   ret->SetEdgeBptr(csc_ptr->indptr.index({col_bptr}));
 
   if (encoding) {
+    ret->SetRowBptr(row_bptr);
     ret->SetOrigRowIds(unique_encoding_rows);
     ret->row_encoding_size_ = row_encoding_size;
   }
@@ -143,6 +143,30 @@ Graph::BatchRowSamplingProbs(int64_t fanout, bool replace,
   graph_ptr->SetEdgeBptr(graph_ptr->csc_->indptr.index({col_bptr_}));
   // graph_ptr->unique_encoding_rows_ = unique_encoding_rows_;
   graph_ptr->row_encoding_size_ = row_encoding_size_;
+  return {graph_ptr, split_index};
+}
+
+std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor>
+Graph::BatchFusedSlicingSampling(torch::Tensor seeds, torch::Tensor col_bptr,
+                                 int64_t fanout, bool replace) {
+  int64_t axis = 1;
+  auto ret =
+      FusedSlicingSampling(axis, seeds, fanout, replace, _CSC, _CSC + _COO);
+  auto graph_ptr = std::get<0>(ret);
+  auto select_index = std::get<1>(ret);
+  graph_ptr->SetColBptr(col_bptr);
+  graph_ptr->SetOrigColIds(seeds);
+  graph_ptr->SetEdgeBptr(graph_ptr->csc_->indptr.index({col_bptr}));
+  torch::Tensor split_index;
+  torch::optional<torch::Tensor> e_ids = csc_->e_ids;
+  if (e_ids.has_value()) {
+    split_index = (e_ids.value().is_pinned())
+                      ? impl::IndexSelectCPUFromGPU(e_ids.value(), select_index)
+                      : e_ids.value().index_select(0, select_index);
+  } else {
+    split_index = select_index;
+  }
+
   return {graph_ptr, split_index};
 }
 
