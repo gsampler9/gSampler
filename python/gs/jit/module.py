@@ -334,13 +334,15 @@ class compile:
                             break
 
                     if select_format is None:
-                        return 99999999
+                        return 99999999, None
 
                     # set format
                     node.update_arg(on_format_index, select_format)
                     if out_format_index is not None:
-                        node.update_arg(out_format_index, select_format + _COO)
+                        node.update_arg(out_format_index, select_format | _COO)
 
+            gm.graph.lint()
+            gm.recompile()
             try:
                 time_cost = self._bench_gm(gm, args)
             except:
