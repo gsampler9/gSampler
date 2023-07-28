@@ -80,7 +80,7 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
   ret->SetColBptr(col_bptr);
   ret->SetRowBptr(row_bptr);
   ret->SetOrigColIds(seeds);
-  ret->SetEdgeBptr(csc_->indptr.index({col_bptr}));
+  ret->SetEdgeBptr(csc_ptr->indptr.index({col_bptr}));
 
   if (encoding) {
     ret->SetOrigRowIds(unique_encoding_rows);
