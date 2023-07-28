@@ -166,11 +166,11 @@ FusedCSCColSlicingSamplingCUDA(torch::Tensor indptr, torch::Tensor indices,
                                bool replace, bool with_coo) {
   torch::Tensor out_indptr, out_coo_row, out_indices, out_select_index;
   if (with_coo)
-    std::tie(out_indices, out_coo_row, out_indices, out_select_index) =
+    std::tie(out_indptr, out_coo_row, out_indices, out_select_index) =
         _FusedCSCColSlicingSampling<int64_t, true>(indptr, indices, node_ids,
                                                    fanout, replace);
   else
-    std::tie(out_indices, out_coo_row, out_indices, out_select_index) =
+    std::tie(out_indptr, out_coo_row, out_indices, out_select_index) =
         _FusedCSCColSlicingSampling<int64_t, false>(indptr, indices, node_ids,
                                                     fanout, replace);
   return {out_indptr, out_coo_row, out_indices, out_select_index};
