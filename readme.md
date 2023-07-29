@@ -48,6 +48,3 @@ We use `pip` to manage our python environment.
 * Node2Vec
 
 See `example` folder for details. More algorithms are being expanded.
-
-# Issues
-* Currently, Super-batching is not supported in the Intermediate Representation (IR). The main reason is that the API after applying super-batching is not consistent with the non-batching mode. Instead, we are providing a complete low-level C++ API to support super-batching now. To use the low-level C++ API, please refer to [...]. The problem will be solved in the future.
