@@ -270,7 +270,7 @@ __global__ void _InsertHashMapKernel(IdType* key, IdType* key_ptr,
   int64_t ele = key_ptr[blockIdx.y] + ele_in_batch;
   while (ele < key_ptr[blockIdx.y + 1]) {
     NodeQueryHashmap<IdType> hashmap(key_buffer, value_buffer, dir_size);
-    hashmap.Insert(key[ele] + blockIdx.y * encoding_size, key[ele]);
+    hashmap.Insert(key[ele] + blockIdx.y * encoding_size, ele);
     ele += gridDim.x * blockDim.x;
   }
 }

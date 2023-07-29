@@ -103,103 +103,42 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
   return {ret, split_index};
 }
 
+
 std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColRowSlcing(
     torch::Tensor col, torch::Tensor col_bptr, torch::Tensor row,
     torch::Tensor row_bptr) {
-  bool encoding = true;
+  torch::Tensor select_index, out_data, indptr, indices;
+  std::shared_ptr<CSC> csc_ptr;
 
-  int64_t axis = 1;
-  int64_t on_format = _CSC;
-  int64_t output_format = _CSC + _COO;
-  CreateSparseFormat(on_format);
-  torch::Tensor select_index;
-  std::shared_ptr<COO> coo_ptr = nullptr;
-  std::shared_ptr<CSC> csc_ptr = nullptr;
-  std::shared_ptr<CSR> csr_ptr = nullptr;
-  std::shared_ptr<_TMP> tmp_ptr = nullptr;
-  bool with_coo = output_format & _COO;
+  std::tie(indptr, indices, select_index) =
+      impl::fusion::BatchCSCColRowSlicingCUDA(csc_->indptr, csc_->indices,
+                                              col, col_bptr, row,
+                                              row_bptr, num_rows_);
+  csc_ptr = std::make_shared<CSC>(CSC{indptr, indices, torch::nullopt});
 
-  torch::optional<torch::Tensor> e_ids = torch::nullopt;
-  int64_t num_batch = col_bptr.numel() - 1;
-
-  int64_t row_encoding_size = GetNumRows();
-
-  torch::Tensor orig_row_ids;
-  // torch::Tensor row_bptr;
-  torch::Tensor unique_encoding_rows;
-
-  if (on_format == _CSC) {
-    CHECK(output_format != _CSR)
-        << "Error in Slicing, Not implementation [on_format = CSC, "
-           "output_forat = CSR] !";
-    auto csc = GetCSC();
-    e_ids = csc->e_ids;
-
-    std::tie(tmp_ptr, select_index, edge_bptr_) = BatchOnIndptrSlicing(
-        csc, col, col_bptr, with_coo, true, row_encoding_size);
-
-    if (encoding) {
-      // torch::Tensor unique_encoding_rows, new_indices;
-      // std::tie(unique_encoding_rows, new_indices) =
-      //    impl::TensorCompact(tmp_ptr->coo_in_indices);
-      // tmp_ptr->coo_in_indices = new_indices;
-
-      // std::tie(row_bptr, orig_row_ids) = impl::batch::GetBatchOffsets(
-      //     unique_encoding_rows, num_batch, row_encoding_size);
-    }
-
-    if (output_format & _CSC)
-      csc_ptr = std::make_shared<CSC>(
-          CSC{tmp_ptr->indptr, tmp_ptr->coo_in_indices, torch::nullopt});
-    if (output_format & _COO) {
-      coo_ptr = std::make_shared<COO>(COO{tmp_ptr->coo_in_indices,
-                                          tmp_ptr->coo_in_indptr,
-                                          torch::nullopt, false, true});
-    }
-
-  } else {
-    LOG(FATAL) << "Not Implementatin Error";
-  }
 
   int64_t new_num_cols = col.numel();
-  int64_t new_num_rows = num_rows_ * num_batch;
+  int64_t new_num_rows = row.numel();
 
   auto ret = c10::intrusive_ptr<Graph>(
       std::unique_ptr<Graph>(new Graph(new_num_rows, new_num_cols)));
 
-  ret->SetNumEdges(select_index.numel());
-  ret->SetCOO(coo_ptr);
   ret->SetCSC(csc_ptr);
-  ret->SetCSR(csr_ptr);
+  ret->SetNumEdges(select_index.numel());
   ret->SetColBptr(col_bptr);
+  ret->SetRowBptr(row_bptr);
   ret->SetOrigColIds(col);
+  ret->SetOrigRowIds(row);
   ret->SetEdgeBptr(csc_ptr->indptr.index({col_bptr}));
-
-  if (encoding) {
-    // ret->SetRowBptr(row_bptr);
-    // ret->SetOrigRowIds(orig_row_ids);
-    ret->row_encoding_size_ = row_encoding_size;
-  }
-  // ret->unique_encoding_rows_ = unique_encoding_rows;
-
   torch::Tensor split_index;
-  if (e_ids.has_value()) {
-    split_index = (e_ids.value().is_pinned())
-                      ? impl::IndexSelectCPUFromGPU(e_ids.value(), select_index)
-                      : e_ids.value().index_select(0, select_index);
+  if (csc_->e_ids.has_value()) {
+    split_index = (csc_->e_ids.value().is_pinned())
+                      ? impl::IndexSelectCPUFromGPU(csc_->e_ids.value(), select_index)
+                      : csc_->e_ids.value().index_select(0, select_index);
   } else {
     split_index = select_index;
   }
-
-  auto graph_ptr = ret;
-  auto edge_index = select_index;
-  auto encode_row = impl::batch::BatchEncodeCUDA(row, row_bptr,
-                                                 graph_ptr->row_encoding_size_);
-  auto ret2 = graph_ptr->BatchRowSlicing(encode_row, row_bptr);
-  auto graph_ptr2 = std::get<0>(ret2);
-  auto edge_index2 = std::get<1>(ret2);
-  auto ret_edge_index = edge_index.index({edge_index2});
-  return {graph_ptr2, ret_edge_index};
+  return {ret, split_index};
 }
 
 std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchRowSlicing(
