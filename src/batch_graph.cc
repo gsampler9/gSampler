@@ -43,12 +43,10 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
         csc, seeds, col_bptr, with_coo, encoding, row_encoding_size);
 
     if (encoding) {
-      // torch::Tensor unique_encoding_rows, new_indices;
-      // std::tie(unique_encoding_rows, new_indices) =
-      //     impl::TensorCompact(tmp_ptr->coo_in_indices);
-      // tmp_ptr->coo_in_indices = new_indices;
-      unique_encoding_rows =
-          std::get<0>(torch::_unique2(tmp_ptr->coo_in_indices));
+      torch::Tensor unique_encoding_rows, new_indices;
+      std::tie(unique_encoding_rows, new_indices) =
+          impl::TensorCompact(tmp_ptr->coo_in_indices);
+      tmp_ptr->coo_in_indices = new_indices;
 
       std::tie(row_bptr, orig_row_ids) = impl::batch::GetBatchOffsets(
           unique_encoding_rows, num_batch, row_encoding_size);
@@ -68,7 +66,12 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
   }
 
   int64_t new_num_cols = seeds.numel();
-  int64_t new_num_rows = num_rows_ * num_batch;
+  int64_t new_num_rows;
+  if (encoding) {
+    new_num_rows = orig_row_ids.numel();
+  } else {
+    new_num_rows = num_rows_ * num_batch;
+  }
 
   auto ret = c10::intrusive_ptr<Graph>(
       std::unique_ptr<Graph>(new Graph(new_num_rows, new_num_cols)));
@@ -83,7 +86,7 @@ std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Graph::BatchColSlicing(
 
   if (encoding) {
     ret->SetRowBptr(row_bptr);
-    ret->SetOrigRowIds(unique_encoding_rows);
+    ret->SetOrigRowIds(orig_row_ids);
     ret->row_encoding_size_ = row_encoding_size;
   }
   // ret->unique_encoding_rows_ = unique_encoding_rows;
