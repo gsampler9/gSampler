@@ -2,7 +2,7 @@ from typing import List
 import torch
 import time
 from .trace import gs_symbolic_trace
-from ..matrix_api import Matrix
+from ..matrix_api import Matrix, BatchMatrix
 import numpy as np
 from ..format import _CSR, _CSC, _COO
 
@@ -15,6 +15,7 @@ from .optimize import (
     fuse_ESqure_and_SumReduce,
     fuse_slicing_and_sampling,
     move_constant_to_top,
+    batch_fuse_slicing_and_sampling,
 )
 
 format_candidate_ops = {
@@ -63,6 +64,7 @@ ops_better_format = {
 }
 
 CONVERT_2_MATRIX = "Convert2Matrix"
+CONVERT_2_BATCHMATRIX = "Convert2BatchMatrix"
 STATIS_LIST = "StatisList"
 GRAPH_ARG = "GRAPH_ARG"
 STATIC_ARG = "STATIC_ARG"
@@ -73,11 +75,27 @@ def get_actions(args):
     graph_args_count = 0
     static_args_count = 0
     for arg_offset, arg in enumerate(args):
-        if isinstance(arg, Matrix):
+        if isinstance(arg, BatchMatrix):
+            actions.append((GRAPH_ARG, graph_args_count, arg_offset,
+                            CONVERT_2_BATCHMATRIX))
+            graph_args_count += 1
+        elif isinstance(arg, Matrix):
             actions.append(
                 (GRAPH_ARG, graph_args_count, arg_offset, CONVERT_2_MATRIX))
             graph_args_count += 1
         elif isinstance(arg, List):
+            actions.append(
+                (STATIC_ARG, static_args_count, arg_offset, STATIS_LIST))
+            static_args_count += 1
+        elif isinstance(arg, bool):
+            actions.append(
+                (STATIC_ARG, static_args_count, arg_offset, STATIS_LIST))
+            static_args_count += 1
+        elif isinstance(arg, int):
+            actions.append(
+                (STATIC_ARG, static_args_count, arg_offset, STATIS_LIST))
+            static_args_count += 1
+        elif isinstance(arg, float):
             actions.append(
                 (STATIC_ARG, static_args_count, arg_offset, STATIS_LIST))
             static_args_count += 1
@@ -113,6 +131,14 @@ def generate_graph_args(args, graph_actions):
                 args[arg_offset].col_ndata,
                 args[arg_offset].edata,
             ])
+        elif a == CONVERT_2_BATCHMATRIX:
+            graph_args.append(args[arg_offset]._graph)
+            graph_data_args.append([
+                args[arg_offset].row_ndata,
+                args[arg_offset].col_ndata,
+                args[arg_offset].edata,
+                args[arg_offset].encoding,
+            ])
         else:
             raise ValueError
     return graph_args, graph_data_args
@@ -145,6 +171,15 @@ def generate_new_args(args, graph_args, inner_graph_data_args, static_args,
                         inner_graph_data_args[offset][1],
                         inner_graph_data_args[offset][2],
                         compact,
+                    ))
+            elif a == CONVERT_2_BATCHMATRIX:
+                new_args.append(
+                    BatchMatrix(
+                        graph_args[offset],
+                        inner_graph_data_args[offset][0],
+                        inner_graph_data_args[offset][1],
+                        inner_graph_data_args[offset][2],
+                        inner_graph_data_args[offset][3],
                     ))
             elif a == STATIS_LIST:
                 new_args.append(static_args[offset])
@@ -186,10 +221,20 @@ class compile:
         self.func = func
         self.iter = 10
 
+        self.use_batchmatrix = False
+        for a in args:
+            if isinstance(a, BatchMatrix):
+                self.use_batchmatrix = True
+                break
+
         # generate static_args via static_actions
         self.static_args = generate_static_args(args, self.static_actions)
 
-        if self._try_compact:
+        if self.use_batchmatrix:
+            gm = self.generate_gm(args, False)
+            self.gm = gm
+
+        elif self._try_compact:
             compact_gm = self.generate_gm(args, True)
             if self._format_select:
                 compact_gm = self.format_selection_gm(compact_gm, args)
@@ -232,6 +277,7 @@ class compile:
             return compact_gm
 
     def optimiza_gm(self, gm):
+
         # pass
         gm = cse(gm)
         gm = dce(gm)
@@ -243,6 +289,7 @@ class compile:
         gm = fuse_e_div_u_SumReduce(gm)
         gm = fuse_ESqure_and_SumReduce(gm)
         gm = merge_fused_u_mul_v(gm)
+        gm = batch_fuse_slicing_and_sampling(gm)
 
         # pass
         gm = dce(gm)

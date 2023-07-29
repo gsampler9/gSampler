@@ -140,9 +140,8 @@ def merge_relabel_and_all_indices(gm: fx.GraphModule) -> fx.GraphModule:
             continue
 
         if len(value) > 2:
-            print(
-                "{} has more than two children: {}, something wrong?".format(key, value)
-            )
+            print("{} has more than two children: {}, something wrong?".format(
+                key, value))
 
         with gm.graph.inserting_before(value[0]):
             new_relabel_node = None
@@ -151,18 +150,14 @@ def merge_relabel_and_all_indices(gm: fx.GraphModule) -> fx.GraphModule:
             else:
                 new_relabel_node = gm.graph.node_copy(value[1])
 
-            getitem_1 = gm.graph.call_function(
-                operator.getitem, args=(new_relabel_node, 0)
-            )
-            getitem_2 = gm.graph.call_function(
-                operator.getitem, args=(new_relabel_node, 1)
-            )
-            getitem_3 = gm.graph.call_function(
-                operator.getitem, args=(new_relabel_node, 2)
-            )
-            getitem_4 = gm.graph.call_function(
-                operator.getitem, args=(new_relabel_node, 3)
-            )
+            getitem_1 = gm.graph.call_function(operator.getitem,
+                                               args=(new_relabel_node, 0))
+            getitem_2 = gm.graph.call_function(operator.getitem,
+                                               args=(new_relabel_node, 1))
+            getitem_3 = gm.graph.call_function(operator.getitem,
+                                               args=(new_relabel_node, 2))
+            getitem_4 = gm.graph.call_function(operator.getitem,
+                                               args=(new_relabel_node, 3))
 
             new_getitem_list = [getitem_1, getitem_2, getitem_3, getitem_4]
 
@@ -185,9 +180,9 @@ def merge_relabel_and_all_indices(gm: fx.GraphModule) -> fx.GraphModule:
 
 
 def fuse_slicing_and_sampling(gm: fx.GraphModule) -> fx.GraphModule:
-    # std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Slicing(seeds, axis, on_format, output_format)
-    # std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> Sampling(axis, fanout, replace, on_format, output_format)
-    # std::tuple<c10::intrusive_ptr<Graph>, torch::Tensor> FusedSlicingSampling(axis, seeds, fanout, replace, on_format, output_format)
+    # Slicing(seeds, axis, on_format, output_format)
+    # Sampling(axis, fanout, replace, on_format, output_format)
+    # FusedSlicingSampling(axis, seeds, fanout, replace, on_format, output_format)
 
     def _get_graph_index_node(node):
         graph_node = None
@@ -204,16 +199,14 @@ def fuse_slicing_and_sampling(gm: fx.GraphModule) -> fx.GraphModule:
         return graph_node, index_node
 
     for node in gm.graph.nodes:
-        if (
-            node.target == "_CAPI_Sampling"
-            and node.args[0].args[0].target == "_CAPI_Slicing"
-        ):
+        if (node.target == "_CAPI_Sampling"
+                and node.args[0].args[0].target == "_CAPI_Slicing"):
             slicing_node = node.args[0].args[0]
-            slicing_graph_node, slicing_index_node = _get_graph_index_node(slicing_node)
+            slicing_graph_node, slicing_index_node = _get_graph_index_node(
+                slicing_node)
             sampling_node = node
             sampling_graph_node, sampling_index_node = _get_graph_index_node(
-                sampling_node
-            )
+                sampling_node)
 
             # check slicing and sampling for same axis
             if sampling_node.args[1] != slicing_node.args[2]:
@@ -256,12 +249,10 @@ def fuse_slicing_and_sampling(gm: fx.GraphModule) -> fx.GraphModule:
                     ),
                 )
 
-                fuse_graph_node = gm.graph.call_function(
-                    operator.getitem, args=(fused_node, 0)
-                )
-                fuse_index_node = gm.graph.call_function(
-                    operator.getitem, args=(fused_node, 1)
-                )
+                fuse_graph_node = gm.graph.call_function(operator.getitem,
+                                                         args=(fused_node, 0))
+                fuse_index_node = gm.graph.call_function(operator.getitem,
+                                                         args=(fused_node, 1))
 
                 # replace graph
                 sampling_graph_node.replace_all_uses_with(fuse_graph_node)
@@ -272,8 +263,8 @@ def fuse_slicing_and_sampling(gm: fx.GraphModule) -> fx.GraphModule:
                     be_repalced_nodes = []
                     for n in slicing_index_node.users:
                         data_node = gm.graph.call_function(
-                            operator.__getitem__, args=(n.args[0], fuse_index_node)
-                        )
+                            operator.__getitem__,
+                            args=(n.args[0], fuse_index_node))
                         new_data_nodes.append(data_node)
 
                         be_repalced_nodes.append(list(n.users)[0])
@@ -286,7 +277,56 @@ def fuse_slicing_and_sampling(gm: fx.GraphModule) -> fx.GraphModule:
     return gm
 
 
+def batch_fuse_slicing_and_sampling(gm: fx.GraphModule) -> fx.GraphModule:
+    # (todo): not general enough
+    #  Graph::BatchColSlicing(torch::Tensor seeds, torch::Tensor col_bptr, bool encoding)
+    #  Graph::BatchRowSampling(int64_t fanout, bool replace)
+    #  Graph::BatchFusedSlicingSampling(torch::Tensor seeds, torch::Tensor col_bptr, int64_t fanout, bool replace)
+
+    for node in gm.graph.nodes:
+        if (node.target == "_CAPI_BatchRowSampling"
+                and node.args[0].args[0].target == "_CAPI_BatchColSlicing"):
+
+            slicing_node = node.args[0].args[0]
+            slicing_index_node = node.args[0]
+            sampling_node = node
+
+            slicing_graph = slicing_node.args[0]
+            sampling_graph = sampling_node.args[0]
+
+            # check not encoding
+            if slicing_node.args[3] == True:
+                continue
+
+            # check if graph_node are used by other nodes
+            if len(slicing_index_node.users) > 1:
+                continue
+
+            # safe to fuse
+            with gm.graph.inserting_before(slicing_node):
+                fused_node = gm.graph.call_method(
+                    "_CAPI_BatchFusedSlicingSampling",
+                    args=(
+                        slicing_node.args[0],
+                        slicing_node.args[1],
+                        slicing_node.args[2],
+                        sampling_node.args[1],
+                        sampling_node.args[2],
+                    ),
+                )
+
+                print(fused_node)
+
+                # replace graph
+                sampling_node.replace_all_uses_with(fused_node)
+
+    # remove dead code
+    gm = dce(gm)
+    return gm
+
+
 def fuse_ESqure_and_SumReduce(gm: fx.GraphModule) -> fx.GraphModule:
+
     def _get_spmm_node(tmp_node):
         for n in tmp_node.users:
             if n.target == operator.getitem and n.args[1] == 1:
@@ -298,23 +338,20 @@ def fuse_ESqure_and_SumReduce(gm: fx.GraphModule) -> fx.GraphModule:
         if node.target == operator.pow and node.args[1] == 2:
             node_users = list(node.users)
             if len(node_users) == 2:
-                if (
-                    "_before_spmm" not in node_users[0].name
-                    and "_before_spmm" not in node_users[1].name
-                ):
+                if ("_before_spmm" not in node_users[0].name
+                        and "_before_spmm" not in node_users[1].name):
                     continue
 
-                if (
-                    "_CAPI_SpMM" != node_users[0].target
-                    and "_CAPI_SpMM" != node_users[1].target
-                ):
+                if ("_CAPI_SpMM" != node_users[0].target
+                        and "_CAPI_SpMM" != node_users[1].target):
                     continue
 
                 ESqure_node = node
                 tmp_node = node_users[0]
                 spmm_node = _get_spmm_node(tmp_node)
 
-                if spmm_node.args[1] != "copy_rhs" and spmm_node.args[2] != "sum":
+                if spmm_node.args[1] != "copy_rhs" and spmm_node.args[
+                        2] != "sum":
                     continue
 
                 # replace ESqure_node
@@ -325,8 +362,7 @@ def fuse_ESqure_and_SumReduce(gm: fx.GraphModule) -> fx.GraphModule:
                 # replace spmm_node
                 with gm.graph.inserting_before(spmm_node):
                     fused_e_squre_spmm_node = gm.graph.call_method(
-                        "_CAPI_FusedESquareSum", args=(spmm_node.args)
-                    )
+                        "_CAPI_FusedESquareSum", args=(spmm_node.args))
 
                 gm.graph.erase_node(spmm_node)
 
@@ -350,7 +386,8 @@ def merge_fused_u_mul_v(gm: fx.GraphModule) -> fx.GraphModule:
         return None
 
     for node in gm.graph.nodes:
-        if node.target == "_CAPI_SDDMM" and node.args[5] == 0 and node.args[6] == 2:
+        if node.target == "_CAPI_SDDMM" and node.args[5] == 0 and node.args[
+                6] == 2:
             key = str(node.args[0]) + str(node.args[1])
 
             if key in merge_nodes:

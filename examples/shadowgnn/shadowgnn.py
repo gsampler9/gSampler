@@ -45,5 +45,10 @@ if __name__ == "__main__":
     bm = gs.matrix_api.BatchMatrix()
     bm.load_from_matrix(m, False)
 
-    for i in batch_shadowgnn_sampler(bm, seeds, seeds_ptr, [25, 10]):
+    bm_compile_func = gs.jit.compile(func=batch_shadowgnn_sampler,
+                                     args=(bm, seeds, seeds_ptr, [25, 10]))
+
+    print(bm_compile_func.gm.graph)
+
+    for i in bm_compile_func(bm, seeds, seeds_ptr, [25, 10]):
         print(i)

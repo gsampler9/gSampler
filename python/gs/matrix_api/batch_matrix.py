@@ -7,6 +7,7 @@ from dgl.utils import gather_pinned_tensor_rows
 
 torch.fx.wrap("batch_gen_block")
 torch.fx.wrap("gather_pinned_tensor_rows")
+torch.fx.wrap("data_index")
 
 
 def batch_gen_block(frontier_list, coo_row_list, coo_col_list, coo_eids,
@@ -147,13 +148,27 @@ class BatchMatrix(Matrix):
                 return ret_matrix
 
             else:
-                data = (None, c_slice)
-                m = super().__getitem__(data)
-                ret_bm = BatchMatrix()
-                ret_bm.load_from_matrix(m, self.encoding)
-                ret_bm._graph._CAPI_SetColBptr(c_slice_ptr)
-                ret_bm._graph._CAPI_BatchSetCols(c_slice)
-                return ret_bm
+                graph, edge_index = self._graph._CAPI_BatchColSlicing(
+                    c_slice, c_slice_ptr, self.encoding)
+
+                ret_matrix._graph = graph
+                # only column slicing
+                if "_ID" not in self.col_ndata:
+                    ret_matrix.col_ndata["_ID"] = c_slice
+                else:
+                    raise NotImplementedError
+
+                ret_matrix._graph = graph
+                for key, value in self.edata.items():
+                    ret_matrix.edata[key] = data_index(value, edge_index)
+
+                for key, value in self.col_ndata.items():
+                    ret_matrix.col_ndata[key] = value[c_slice]
+
+                for key, value in self.row_ndata.items():
+                    ret_matrix.row_ndata[key] = value
+
+                return ret_matrix
 
         else:
             raise NotImplementedError

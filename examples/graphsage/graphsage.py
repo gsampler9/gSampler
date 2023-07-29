@@ -48,5 +48,11 @@ if __name__ == "__main__":
     bm = gs.matrix_api.BatchMatrix()
     bm.load_from_matrix(m, False)
 
-    for i in batch_graphsage_sampler(bm, seeds, seeds_ptr, [25, 10]):
+    bm_compile_func = gs.jit.compile(func=batch_graphsage_sampler,
+                                     args=(bm, seeds, seeds_ptr, [25, 10]),
+                                     try_compact=False,
+                                     format_select=False)
+
+    print(bm_compile_func.gm.graph)
+    for i in bm_compile_func(bm, seeds, seeds_ptr, [25, 10]):
         print(i)

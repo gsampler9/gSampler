@@ -67,5 +67,7 @@ if __name__ == "__main__":
     # batch
     bm = gs.BatchMatrix()
     bm.load_from_matrix(m)
-    for i in batch_ladise_sampler(bm, seeds, seeds_ptr, [2000, 2000]):
+    bm_compile_func = gs.jit.compile(func=batch_ladise_sampler,
+                                     args=(bm, seeds, seeds_ptr, [2000, 2000]))
+    for i in bm_compile_func(bm, seeds, seeds_ptr, [2000, 2000]):
         print(i)
