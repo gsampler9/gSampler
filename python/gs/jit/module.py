@@ -190,7 +190,7 @@ def generate_new_args(args, graph_args, inner_graph_data_args, static_args,
 
 class compile:
 
-    def __init__(self, func, args, try_compact=True, format_select=True):
+    def __init__(self, func, args, try_compact=True, format_select=True, must_compact=False):
         """
         This is auto wrapper for user's func.
         We will create an func inner_wrapper according user's func and its args.
@@ -222,6 +222,7 @@ class compile:
         self.iter = 10
 
         self.use_batchmatrix = False
+        self.must_compact = must_compact
         for a in args:
             if isinstance(a, BatchMatrix):
                 self.use_batchmatrix = True
@@ -233,6 +234,13 @@ class compile:
         if self.use_batchmatrix:
             gm = self.generate_gm(args, False)
             self.gm = gm
+            
+        elif self.must_compact:
+            compact_gm = self.generate_gm(args, True)
+            if self._format_select:
+                compact_gm = self.format_selection_gm(compact_gm, args)
+                
+            self.gm = compact_gm
 
         elif self._try_compact:
             compact_gm = self.generate_gm(args, True)
