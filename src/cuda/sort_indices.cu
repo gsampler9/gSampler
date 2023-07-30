@@ -17,19 +17,22 @@ torch::Tensor SortIndicesCUDA(torch::Tensor indptr, torch::Tensor indices) {
   void* d_temp_storage = NULL;
   size_t temp_storage_bytes = 0;
 
-  cub::DeviceSegmentedRadixSort::SortKeys(
-      d_temp_storage, temp_storage_bytes, indices.data_ptr<int64_t>(),
-      sorted_indices.data_ptr<int64_t>(), num_items, num_segments,
-      indptr.data_ptr<int64_t>(), indptr.data_ptr<int64_t>() + 1);
+  ID_TYPE_SWITCH(indptr.dtype(), IdType, {
+    cub::DeviceSegmentedRadixSort::SortKeys(
+        d_temp_storage, temp_storage_bytes, indices.data_ptr<IdType>(),
+        sorted_indices.data_ptr<IdType>(), num_items, num_segments,
+        indptr.data_ptr<IdType>(), indptr.data_ptr<IdType>() + 1);
 
-  d_temp_storage =
-      c10::cuda::CUDACachingAllocator::raw_alloc(temp_storage_bytes);
+    d_temp_storage =
+        c10::cuda::CUDACachingAllocator::raw_alloc(temp_storage_bytes);
 
-  cub::DeviceSegmentedRadixSort::SortKeys(
-      d_temp_storage, temp_storage_bytes, indices.data_ptr<int64_t>(),
-      sorted_indices.data_ptr<int64_t>(), num_items, num_segments,
-      indptr.data_ptr<int64_t>(), indptr.data_ptr<int64_t>() + 1);
-  c10::cuda::CUDACachingAllocator::raw_delete(d_temp_storage);
+    cub::DeviceSegmentedRadixSort::SortKeys(
+        d_temp_storage, temp_storage_bytes, indices.data_ptr<IdType>(),
+        sorted_indices.data_ptr<IdType>(), num_items, num_segments,
+        indptr.data_ptr<IdType>(), indptr.data_ptr<IdType>() + 1);
+    c10::cuda::CUDACachingAllocator::raw_delete(d_temp_storage);
+  });
+
   return sorted_indices;
 }
 
