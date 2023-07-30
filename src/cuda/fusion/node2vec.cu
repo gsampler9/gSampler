@@ -37,6 +37,13 @@ __device__ bool BinarySearch(int64_t* ptr, int64_t degree, int64_t target) {
 
 __device__ bool CheckConnect(int64_t* graph_indice, int64_t* graph_indptr,
                              int64_t degree, int64_t src, int64_t dst) {
+  int64_t item = cub::UpperBound(graph_indice + graph_indptr[src], degree, dst);
+  if (item == degree) {
+    return false;
+  } else {
+    return true;
+  }
+  /*
   if (BinarySearch(graph_indice + graph_indptr[src], degree, dst)) {
     // paster()
     // printf("Connect %d %d \n", src, dst);
@@ -44,6 +51,7 @@ __device__ bool CheckConnect(int64_t* graph_indice, int64_t* graph_indptr,
   }
   // printf("not Connect %d %d \n", src, dst);
   return false;
+  */
 }
 
 __global__ void _Node2VecKernel(const int64_t* seed_data,
