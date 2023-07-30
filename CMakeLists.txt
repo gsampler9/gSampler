@@ -10,7 +10,7 @@ endif()
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -fopenmp")
 
 find_package(PythonInterp REQUIRED)
 
@@ -46,6 +46,7 @@ list(APPEND GS_EXTERNAL_LIB glog::glog)
 
 file(GLOB GS_SRC
   src/*.cc
+  src/cpu/*.cc
   src/cuda/*.cu
   src/cuda/fusion/*.cu
   src/cuda/batch/*.cu

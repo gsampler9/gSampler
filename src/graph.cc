@@ -2,6 +2,7 @@
 
 #include <sstream>
 #include "bcast.h"
+#include "cpu/tensor_ops.h"
 #include "cuda/fusion/column_row_slicing.h"
 #include "cuda/fusion/edge_map_reduce.h"
 #include "cuda/fusion/fused_coo_e_div_u_sum.h"
@@ -613,8 +614,14 @@ void Graph::SortCSCIndices() {
   if (csc_->e_ids.has_value())
     LOG(FATAL) << "SortCSCIndices error: csc_ has e_ids";
 
-  auto sorted_indices = impl::SortIndicesCUDA(csc_->indptr, csc_->indices);
-  csc_->indices = sorted_indices;
+  if (csc_->indices.is_pinned()) {
+    auto sorted_indices = impl::SortIndicesCPU(csc_->indptr, csc_->indices);
+    csc_->indices = sorted_indices;
+
+  } else {
+    auto sorted_indices = impl::SortIndicesCUDA(csc_->indptr, csc_->indices);
+    csc_->indices = sorted_indices;
+  }
 
   // todo (output select_index)
 }
