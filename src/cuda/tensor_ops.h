@@ -35,6 +35,8 @@ torch::Tensor IndexHashMapSearchCUDA(torch::Tensor key_buffer,
                                      torch::Tensor keys);
 
 std::tuple<torch::Tensor, torch::Tensor> TensorCompact(torch::Tensor data);
+
+torch::Tensor SortIndicesCUDA(torch::Tensor indptr, torch::Tensor indices);
 }  // namespace impl
 }  // namespace gs
 

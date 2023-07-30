@@ -606,4 +606,17 @@ torch::Tensor Graph::GetValidNodes(torch::Tensor col_seeds,
   }
 }
 
+void Graph::SortCSCIndices() {
+  if (coo_ != nullptr and csr_ != nullptr and csc_ != nullptr)
+    LOG(FATAL) << "SortCSCIndices error: must only has csc_";
+
+  if (csc_->e_ids.has_value())
+    LOG(FATAL) << "SortCSCIndices error: csc_ has e_ids";
+
+  auto sorted_indices = impl::SortIndicesCUDA(csc_->indptr, csc_->indices);
+  csc_->indices = sorted_indices;
+
+  // todo (output select_index)
+}
+
 }  // namespace gs

@@ -120,6 +120,9 @@ class Graph : public torch::CustomClassHolder {
                      torch::Tensor out, torch::Tensor argu, torch::Tensor arge,
                      int64_t u_target, int64_t on_format);
 
+
+  void SortCSCIndices();
+
   // todo: current batch graph will disable graph compaction and the graph
   // formats must be in [CSC, COO]
 

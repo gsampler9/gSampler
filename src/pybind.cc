@@ -38,6 +38,7 @@ TORCH_LIBRARY(gs_classes, m) {
       .def("_CAPI_FusedUOPV", &Graph::FusedUOPV)
       .def("_CAPI_FusedESquareSum", &Graph::FusedESquareSum)
       .def("_CAPI_FusedEDivUSum", &Graph::FusedEDivUSum)
+      .def("_CAPI_SortCSCIndices", &Graph::SortCSCIndices)
       .def("_CAPI_BatchColSlicing", &Graph::BatchColSlicing)
       .def("_CAPI_BatchRowSlicing", &Graph::BatchRowSlicing)
       .def("_CAPI_BatchColRowSlcing", &Graph::BatchColRowSlcing)
