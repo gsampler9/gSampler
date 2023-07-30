@@ -37,8 +37,10 @@ __device__ bool BinarySearch(IdType* ptr, IdType degree, IdType target) {
 }
 
 template <typename IdType>
-__device__ bool CheckConnect(IdType* graph_indice, IdType* graph_indptr,
-                             IdType degree, IdType src, IdType dst) {
+__inline__ __device__ bool CheckConnect(IdType* graph_indice,
+                                        IdType* graph_indptr, IdType src,
+                                        IdType dst) {
+  IdType degree = graph_indptr[src + 1] - graph_indptr[src];
   IdType item = cub::UpperBound(graph_indice + graph_indptr[src], degree, dst);
   if (item == degree) {
     return false;
@@ -79,9 +81,8 @@ __global__ void _Node2VecKernel(const IdType* seed_data,
   for (int idx = tid; idx < num_seeds; idx += grid_mul_block) {
     for (int step_idx = 0; step_idx < max_num_steps; step_idx++) {
       IdType curr = out_traces_data[step_idx * num_seeds + idx];
-      IdType pick = -1;
       if (curr == -1) {
-        out_traces_data[(step_idx + 1) * num_seeds + idx] = pick;
+        out_traces_data[(step_idx + 1) * num_seeds + idx] = -1;
       } else {
         const IdType in_row_start = graph_indptr[curr];
         const IdType deg = graph_indptr[curr + 1] - graph_indptr[curr];
@@ -92,23 +93,26 @@ __global__ void _Node2VecKernel(const IdType* seed_data,
             int64_t y = (int64_t)floor(curand_uniform(&rng) * max_scale);
             double h;
             outV = graph_indice[in_row_start + x];
-            if (CheckConnect(graph_indice, graph_indptr, deg, curr, outV)) {
-              h = q;
-            } else if (lastV == outV) {
+            if (lastV == outV) {
               h = p;
+            } else if (CheckConnect(graph_indice, graph_indptr, lastV, outV)) {
+              h = q;
             } else {
               h = 1.0;
             }
             if (y < h) break;
           } while (true);
           out_traces_data[(step_idx + 1) * num_seeds + idx] = outV;
+
         } else if (deg == 1) {
           out_traces_data[(step_idx + 1) * num_seeds + idx] =
               graph_indice[in_row_start];
+
         } else {
           out_traces_data[(step_idx + 1) * num_seeds + idx] = -1;
         }
       }
+      lastV = curr;
     }
   }
 }
