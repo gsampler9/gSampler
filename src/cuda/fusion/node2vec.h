@@ -6,8 +6,8 @@ namespace gs {
 namespace impl {
 namespace fusion {
 torch::Tensor FusedNode2VecCUDA(torch::Tensor seeds, int64_t walk_length,
-                                int64_t* indices, int64_t* indptr, double p,
-                                double q);
+                                torch::Tensor indices, torch::Tensor indptr,
+                                double p, double q);
 }
 }  // namespace impl
 }  // namespace gs

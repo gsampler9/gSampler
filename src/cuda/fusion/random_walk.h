@@ -6,7 +6,7 @@ namespace gs {
 namespace impl {
 namespace fusion {
 torch::Tensor FusedRandomWalkCUDA(torch::Tensor seeds, int64_t walk_length,
-                                  int64_t* indices, int64_t* indptr);
+                                  torch::Tensor indices, torch::Tensor indptr);
 }
 }  // namespace impl
 }  // namespace gs
