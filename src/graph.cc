@@ -618,9 +618,11 @@ void Graph::SortCSCIndices() {
     auto sorted_indices = impl::SortIndicesCPU(csc_->indptr, csc_->indices);
     csc_->indices = sorted_indices;
 
-  } else {
+  } else if (csc_->indices.is_cuda()) {
     auto sorted_indices = impl::SortIndicesCUDA(csc_->indptr, csc_->indices);
     csc_->indices = sorted_indices;
+  } else {
+    LOG(FATAL) << "Not supported device";
   }
 
   // todo (output select_index)
