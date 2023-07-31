@@ -11,6 +11,8 @@
 #define WID (threadIdx.x / 32)
 #define BLOCK_SIZE 256
 
+typedef unsigned int uint;
+
 using namespace cooperative_groups;
 
 namespace gs {
