@@ -74,6 +74,7 @@ TORCH_LIBRARY(gs_ops, m) {
   m.def("_CAPI_BatchSplitByOffset", &gs::impl::batch::SplitByOffset);
   m.def("_CAPI_BatchIndptrSplitByOffset",
         &gs::impl::batch::SplitIndptrByOffsetCUDA);
+  m.def("_CAPI_IndexSearch", &IndexSearch);
 }
 
 namespace gs {}

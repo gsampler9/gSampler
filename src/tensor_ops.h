@@ -26,5 +26,7 @@ std::tuple<torch::Tensor, torch::Tensor> BatchListSamplingProbs(
 std::tuple<torch::Tensor, torch::Tensor> BatchListSampling(int64_t num_picks,
                                                            bool replace,
                                                            torch::Tensor range);
+
+torch::Tensor IndexSearch(torch::Tensor origin_data, torch::Tensor keys);
 }  // namespace gs
 #endif

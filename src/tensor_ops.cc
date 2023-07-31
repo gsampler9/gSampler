@@ -27,4 +27,14 @@ std::tuple<torch::Tensor, torch::Tensor> BatchListSampling(
                                                  range);
 }
 
+torch::Tensor IndexSearch(torch::Tensor origin_data, torch::Tensor keys) {
+  torch::Tensor key_buffer, value_buffer;
+
+  std::tie(key_buffer, value_buffer) =
+      impl::IndexHashMapInsertCUDA(origin_data);
+  torch::Tensor result =
+      impl::IndexHashMapSearchCUDA(key_buffer, value_buffer, keys);
+  return result;
+}
+
 }  // namespace gs
