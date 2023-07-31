@@ -3,11 +3,25 @@
 #include "stdlib.h"
 #include "tensor_ops.h"
 
+#define ID_TYPE_SWITCH(val, IdType, ...)               \
+  do {                                                 \
+    if ((val).scalar_type() == torch::kInt32) {        \
+      typedef int32_t IdType;                          \
+      { __VA_ARGS__ }                                  \
+    } else if ((val).scalar_type() == torch::kInt64) { \
+      typedef int64_t IdType;                          \
+      { __VA_ARGS__ }                                  \
+    } else {                                           \
+      LOG(FATAL) << "ID can only be int32 or int64";   \
+    }                                                  \
+  } while (0)
+
 namespace gs {
 namespace impl {
 
+template <typename IdType>
 int cmpfunc(const void *a, const void *b) {
-  return (*(int64_t *)a - *(int64_t *)b);
+  return (*(IdType *)a - *(IdType *)b);
 }
 
 torch::Tensor SortIndicesCPU(torch::Tensor indptr, torch::Tensor indices) {
@@ -16,27 +30,20 @@ torch::Tensor SortIndicesCPU(torch::Tensor indptr, torch::Tensor indices) {
   //      torch::TensorOptions().pinned_memory(true));
 
   int64_t num_segments = indptr.numel() - 1;
-  if (indptr.scalar_type() == torch::kInt64) {
+
 #pragma omp parallel for
-    for (int64_t i = 0; i < num_segments; i++) {
-      int64_t array_len =
-          indptr.data_ptr<int64_t>()[i + 1] - indptr.data_ptr<int64_t>()[i];
-      int64_t *array_beg =
-          indices.data_ptr<int64_t>() + indptr.data_ptr<int64_t>()[i];
-      qsort(array_beg, array_len, sizeof(int64_t), cmpfunc);
-    }
-  } else if (indptr.scalar_type() == torch::kInt32) {
-#pragma omp parallel for
-    for (int32_t i = 0; i < num_segments; i++) {
-      int32_t array_len =
-          indptr.data_ptr<int32_t>()[i + 1] - indptr.data_ptr<int32_t>()[i];
-      int32_t *array_beg =
-          indices.data_ptr<int32_t>() + indptr.data_ptr<int32_t>()[i];
-      qsort(array_beg, array_len, sizeof(int32_t), cmpfunc);
-    }
-  } else {
-    LOG(FATAL) << "No Implementation!";
+  for (int64_t i = 0; i < num_segments; i++) {
+    ID_TYPE_SWITCH(indptr, ETyep, {
+      ID_TYPE_SWITCH(indices, NType, {
+        ETyep array_len =
+            indptr.data_ptr<ETyep>()[i + 1] - indptr.data_ptr<ETyep>()[i];
+        NType *array_beg =
+            indices.data_ptr<NType>() + indptr.data_ptr<ETyep>()[i];
+        qsort(array_beg, array_len, sizeof(NType), cmpfunc<NType>);
+      });
+    });
   }
+
   return indices;
 }
 }  // namespace impl
