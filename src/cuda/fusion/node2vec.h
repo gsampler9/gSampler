@@ -8,7 +8,7 @@ namespace fusion {
 torch::Tensor FusedNode2VecCUDA(torch::Tensor seeds, int64_t walk_length,
                                 torch::Tensor indices, torch::Tensor indptr,
                                 double p, double q);
-}
+}  // namespace fusion
 }  // namespace impl
 }  // namespace gs
 
