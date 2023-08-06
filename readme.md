@@ -105,7 +105,8 @@ train_seedloader = gs.SeedGenerator(train_nid, batch_size=batch_size)
 
 
 # Step 5: Compile sampler function with provided arguments
-# At this step, you need to compile the `graphsage_sampler` function using the given arguments. Ensure to use constants for Matrix, List, Integer, and Float, but not for tensors.
+# At this step, you need to compile the `graphsage_sampler` function using the given arguments. 
+# Note that it will convert List, Integer, and Float into constants during compilation.
 compile_func = gs.jit.compile(func=graphsage_sampler, args=(m, train_seedloader.data[:batch_size], fanouts))
 
 
