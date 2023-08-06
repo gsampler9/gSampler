@@ -1,3 +1,8 @@
+/**
+ *  Copyright (c) 2021 by Contributors
+ * @file array/cuda/rowwise_sampling.cu
+ * @brief uniform rowwise sampling
+ */
 #include <curand_kernel.h>
 #include <thrust/execution_policy.h>
 #include "atomic.h"

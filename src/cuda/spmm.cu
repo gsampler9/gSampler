@@ -1,3 +1,8 @@
+/*!
+ *  Copyright (c) 2020 by Contributors
+ * \file array/cuda/spmm.cu
+ * \brief SPMM C APIs and definitions.
+ */
 #include "./spmm.h"
 
 #include "./cuda_common.h"

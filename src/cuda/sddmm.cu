@@ -1,3 +1,8 @@
+/*!
+ *  Copyright (c) 2020 by Contributors
+ * \file array/cuda/sddmm.cu
+ * \brief SDDMM C APIs and definitions.
+ */
 #include "./sddmm.h"
 
 #include "./cuda_common.h"
@@ -82,7 +87,7 @@ __global__ void SDDMMCOOTreeReduceKernel(
     const DType* rhsoff =
         rhs + Selector<RhsTarget>::Call(src, eid, dst) * rhs_len;
     DType* outoff = out + eid * out_len;
-    int tx = threadIdx.x;  // tx < 32
+    int tx = threadIdx.x;   // tx < 32
     for (int i = blockIdx.y; i < out_len;
          i += gridDim.y) {  // over output feature dimension
       const Idx lhs_add = UseBcast ? __ldg(lhs_off + i) : i;
