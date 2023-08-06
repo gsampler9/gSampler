@@ -13,12 +13,11 @@ Compared to existing solutions, `gSampler` offers unprecedented programming supp
 # Installation
 
 ## Software Version
-* Ubuntu 20.04
-* g++/gcc v9.4.0
-* CMake v3.16.3
-* CUDA v11.6
-* PyTorch v1.12.1
-* DGL v0.9.1
+* g++/gcc >= v9.4.0
+* CMake >= v3.16.3
+* CUDA >= v11.6
+* PyTorch >= v1.12.1
+* DGL >= v0.9.1
 
 ## Install gSampler
 
