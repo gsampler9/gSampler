@@ -1,5 +1,7 @@
 # gSampler: Efficient GPU-Based Graph Sampling for Graph Learning
 
+This repository contains the source code for the SOSP23 paper titled "gSampler: General and Efficient GPU-based Graph Sampling for Graph Learning".
+
 `gSampler` is a high-performance GPU-based graph sampling technology specifically designed for graph learning. It utilizes the "Extract-Compute-Select-Finalize" (ECSF) model for single-layer graph sampling and provides matrix-centric APIs that are user-friendly and intuitive.
 
 To optimize the application of various sampling algorithms on different datasets, `gSampler` incorporates data flow graphs and introduces several optimizations, including:
@@ -9,6 +11,34 @@ To optimize the application of various sampling algorithms on different datasets
 * `Super-batching`: Batching the sampling tasks to improve GPU utilization without compromising training accuracy.
 
 Compared to existing solutions, `gSampler` offers unprecedented programming support and performance improvements for graph sampling, particularly for training graph neural networks (GNNs).
+
+# Repository Directory Structure
+
+The repository is structured as follows:
+
+```
+├── CMakeLists.txt
+├── examples/            # Usage examples for gSampler
+├── LICENSE
+├── python/
+│   ├── gs/
+│   │   ├── format.py
+│   │   ├── jit/
+│   │   │   ├── module.py   # Main compilation module (gs.jit.compile)
+│   │   │   ├── optimize.py # Implementation of optimization passes (e.g., CSE, kernel fusion)
+│   │   │   └── trace.py    # Modified torch.fx for graph sampling
+│   │   ├── matrix_api/
+│   │   │   ├── batch_matrix.py # BatchMatrix API with super-batching
+│   │   │   └── matrix.py       # Matrix API
+│   │   ├── ops/           # Python wrapper for C++ API
+│   │   └── utils/
+│   └── setup.py
+├── readme.md
+├── scripts/
+├── src/                   # Implementation of low-level C++ API for matrices
+├── tests/
+└── third_party/
+```
 
 # Installation
 
@@ -38,6 +68,14 @@ To install `gSampler`, use `pip` to manage your Python environment.
    cd ../python && python3 setup.py install
    ```
 
+4. Testing the Package Path
+   ```shell
+   python3
+   import gs
+   print(gs.package_path)
+   # Expecting output in this section
+   ```
+
 # Supported algorithms
 `gSampler` supports various graph sampling algorithms, including:
 
@@ -52,7 +90,8 @@ To install `gSampler`, use `pip` to manage your Python environment.
 * RandomWalk
 * Node2Vec
 
-Please check the `example` folder for more details. Additionally, the code for reproducing the evaluations mentioned in the paper is available in this [repository](https://github.com/gpzlx1/gsampler-artifact-evaluation).
+
+For more details, refer to the `example` folder. You can test each demo by running `python *.py` directly. Additionally, the code for reproducing the evaluations mentioned in the paper is available in this [repository](https://github.com/gpzlx1/gsampler-artifact-evaluation).
 
 # Usage
 
@@ -128,6 +167,33 @@ for epoch in range(args.num_epoch):
 ```
 
 For detailed E2E training, please refer `examples/graphsage/graphsage_e2e.py` and `examples/ladies/ladies_e2e.py`
+
+
+# Datasets
+
+This repository currently supports two types of native datasets: `Reddit` and all `OGB Node Property Prediction Datasets`. You can access them using the functions `gs.utils.load_reddit` and `gs.utils.load_ogb` for downloading and preprocessing.
+
+To work with other datasets, follow these steps:
+
+1. Prepare the graph in CSC format.
+2. Load the dataset using the `m.load_graph` API.
+
+```python
+# Prepare the graph in CSC format
+csc_indptr, csc_indices = load_graph(...)
+
+# Load the graph into GPU memory
+m = gs.Matrix()
+m.load_graph("CSC", [csc_indptr.cuda(), csc_indices.cuda()])
+
+# For large-scale graphs with Unified Virtual Addressing (UVA)
+m.load_graph("CSC", [csc_indptr.pin_memory(), csc_indices.pin_memory()])
+
+# Utilize super-batching by converting Matrix to BatchMatrix
+bm = gs.BatchMatrix()
+bm.load_from_matrix(m)
+```
+
 
 
 # License
