@@ -1,6 +1,6 @@
 # gSampler: Efficient GPU-Based Graph Sampling for Graph Learning
 
-This repository contains the source code for the SOSP23 paper titled "gSampler: General and Efficient GPU-based Graph Sampling for Graph Learning".
+This repository contains the source code for the SOSP23 paper titled ["gSampler: General and Efficient GPU-based Graph Sampling for Graph Learning"](https://dl.acm.org/doi/10.1145/3600006.3613168).
 
 `gSampler` is a high-performance GPU-based graph sampling technology specifically designed for graph learning. It utilizes the "Extract-Compute-Select-Finalize" (ECSF) model for single-layer graph sampling and provides matrix-centric APIs that are user-friendly and intuitive.
 
@@ -212,4 +212,26 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+```
+
+# Citing gSampler
+If you find this repo helpful, please cite the paper.
+```tex
+@inproceedings{10.1145/3600006.3613168,
+author = {Gong, Ping and Liu, Renjie and Mao, Zunyao and Cai, Zhenkun and Yan, Xiao and Li, Cheng and Wang, Minjie and Li, Zhuozhao},
+title = {GSampler: General and Efficient GPU-Based Graph Sampling for Graph Learning},
+year = {2023},
+isbn = {9798400702297},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3600006.3613168},
+doi = {10.1145/3600006.3613168},
+abstract = {Graph sampling prepares training samples for graph learning and can dominate the training time. Due to the increasing algorithm diversity and complexity, existing sampling frameworks are insufficient in the generality of expression and the efficiency of execution. To close this gap, we conduct a comprehensive study on 15 popular graph sampling algorithms to motivate the design of gSampler, a general and efficient GPU-based graph sampling framework. gSampler models graph sampling using a general 4-step Extract-Compute-Select-Finalize (ECSF) programming model, proposes a set of matrix-centric APIs that allow to easily express complex graph sampling algorithms, and incorporates a data-flow intermediate representation (IR) that translates high-level API codes for efficient GPU execution. We demonstrate that implementing graph sampling algorithms with gSampler is easy and intuitive. We also conduct extensive experiments with 7 algorithms, 4 graph datasets, and 2 hardware configurations. The results show that gSampler introduces sampling speedups of 1.14--32.7\texttimes{} and an average speedup of 6.54\texttimes{}, compared to state-of-the-art GPU-based graph sampling systems such as DGL, which translates into an overall time reduction of over 40\% for graph learning. gSampler is open-source at https://tinyurl.com/29twthd4.},
+booktitle = {Proceedings of the 29th Symposium on Operating Systems Principles},
+pages = {562–578},
+numpages = {17},
+keywords = {graph neural network, graphics processing unit, graph learning, graph sampling},
+location = {Koblenz, Germany},
+series = {SOSP '23}
+}
 ```
