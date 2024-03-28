@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
 project(GS LANGUAGES CXX CUDA)
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -56,7 +56,7 @@ add_library(gs SHARED ${GS_SRC})
 target_link_libraries(gs ${GS_EXTERNAL_LIB})
 target_link_libraries(gs Thrust)
 set_target_properties(gs PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-set_target_properties(gs PROPERTIES CUDA_STANDARD 14)
+set_target_properties(gs PROPERTIES CUDA_STANDARD 17)
 set_target_properties(gs PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 enable_testing()
