@@ -4,6 +4,7 @@
 #include <c10/util/Logging.h>
 
 // Undefine macros to avoid conflicts between torch logger and glog
+#undef DLOG
 #undef LOG
 #undef VLOG_IS_ON
 #undef VLOG
