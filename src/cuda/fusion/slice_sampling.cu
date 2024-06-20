@@ -17,7 +17,7 @@ __global__ void _FusedSliceSampleSubIndicesReplaceKernel(
     const uint64_t random_seed) {
   int64_t row = blockIdx.x * blockDim.y + threadIdx.y;
   curandStatePhilox4_32_10_t rng;
-  curand_init(random_seed * gridDim.x + blockIdx.x, threadIdx.x, 0, &rng);
+  curand_init(random_seed * blockIdx.x + threadIdx.y, threadIdx.x, 0, &rng);
 
   while (row < size) {
     IdType col = column_ids[row];
@@ -47,7 +47,7 @@ __global__ void _FusedSliceSampleSubIndicesKernel(
     const uint64_t random_seed) {
   int64_t row = blockIdx.x * blockDim.y + threadIdx.y;
   curandStatePhilox4_32_10_t rng;
-  curand_init(random_seed * gridDim.x + blockIdx.x, threadIdx.x, 0, &rng);
+  curand_init(random_seed * blockIdx.x + threadIdx.y, threadIdx.x, 0, &rng);
 
   while (row < size) {
     IdType col = column_ids[row];
