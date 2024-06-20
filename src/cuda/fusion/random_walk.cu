@@ -64,7 +64,7 @@ torch::Tensor FusedRandomWalkCUDA(torch::Tensor seeds, int64_t walk_length,
     _RandomWalkKernel<<<nbx, ntx>>>(seeds.data_ptr<IdType>(), num_seeds,
                                     max_num_steps, indices.data_ptr<IdType>(),
                                     indptr.data_ptr<IdType>(), out_traces_data);
-    return out_traces_tensor.reshape({seeds.numel(), -1});
+    return out_traces_tensor.reshape({-1, seeds.numel()});
   });
   return torch::Tensor();
 }

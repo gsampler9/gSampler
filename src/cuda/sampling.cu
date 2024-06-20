@@ -23,7 +23,7 @@ __global__ void _SampleSubIndicesReplaceKernel(IdType* sub_indices,
                                                const uint64_t random_seed) {
   int64_t row = blockIdx.x * blockDim.y + threadIdx.y;
   curandStatePhilox4_32_10_t rng;
-  curand_init(random_seed * gridDim.x + blockIdx.x, threadIdx.x, 0, &rng);
+  curand_init(random_seed * blockIdx.x + threadIdx.y, threadIdx.x, 0, &rng);
 
   while (row < size) {
     IdType in_start = indptr[row];
@@ -53,7 +53,7 @@ __global__ void _SampleSubIndicesKernel(IdType* sub_indices,
                                         const uint64_t random_seed) {
   int64_t row = blockIdx.x * blockDim.y + threadIdx.y;
   curandStatePhilox4_32_10_t rng;
-  curand_init(random_seed * gridDim.x + blockIdx.x, threadIdx.x, 0, &rng);
+  curand_init(random_seed * blockIdx.x + threadIdx.y, threadIdx.x, 0, &rng);
 
   while (row < size) {
     IdType in_start = indptr[row];
